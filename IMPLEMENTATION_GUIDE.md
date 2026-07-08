@@ -118,7 +118,7 @@ Add scripts to `package.json` (Node needs `tsx` to run `.ts` files directly):
 }
 ```
 
-> **Note:** The Vercel course uses `bun run index.ts` because Bun runs TypeScript natively. With pnpm, use `pnpm start --` followed by your args (see verify commands below).
+> **Note:** The Vercel course uses `bun run index.ts` because Bun runs TypeScript natively. With pnpm, use `pnpm start` followed by your args (see verify commands below).
 
 
 
@@ -229,10 +229,10 @@ teensycode/
 
 ```bash
 # Chatbot (1 step, no tool call)
-pnpm start -- . "What files are in this project?"
+pnpm start . "What files are in this project?"
 
 # Agent (2+ steps, calls read)
-pnpm start -- . "Read the tsconfig.json"
+pnpm start . "Read the tsconfig.json"
 
 pnpm typecheck
 ```
@@ -271,8 +271,8 @@ EXAMPLES: ...
 **Verify:**
 
 ```bash
-pnpm start -- . "Find all TODO comments in this project"   # → grep
-pnpm start -- . "Read the tsconfig.json"                  # → read
+pnpm start . "Find all TODO comments in this project"   # → grep
+pnpm start . "Read the tsconfig.json"                  # → read
 ```
 
 **Done when:**
@@ -310,8 +310,8 @@ function isSafe(command: string): boolean {
 **Verify:**
 
 ```bash
-pnpm start -- . "List all files in this directory"        # → bash (safe)
-pnpm start -- . "Run the command: rm -rf node_modules"    # → blocked message
+pnpm start . "List all files in this directory"        # → bash (safe)
+pnpm start . "Run the command: rm -rf node_modules"    # → blocked message
 ```
 
 **Done when:**
