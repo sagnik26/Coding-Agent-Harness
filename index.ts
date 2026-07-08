@@ -5,6 +5,7 @@ import z from "zod";
 import { resolve } from "node:path";
 import { readFileSync } from "node:fs";
 import { execSync } from "node:child_process";
+import { buildSystemPrompt } from "./src/system";
 
 const customOpenAI = createOpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -183,24 +184,19 @@ const grep = tool({
     },
 });
 
-
 const bash = createBashTool(localOps, createApproval({ mode: "delegated", trust: ["pnpm typecheck", "pnpm start", "pnpm test", "git status"] }));
+
+const instructions = buildSystemPrompt({
+    workingDirectory: cwd,
+    sandboxType: "local",
+    toolNames: Object.keys({ read, grep, bash }),
+});
+
+console.log("Instructions: ", instructions);
  
 const agent = new ToolLoopAgent({
   model: customOpenAI(process.env.OPENAI_MODEL ?? "gpt-4o-mini"),
-  instructions: `You are a coding agent working in: ${cwd}
- 
-  # Agency
-  - USE your tools. Read files, search code, run commands, then answer.
-  - Do NOT explain what you WOULD do. Actually do it.
-  - Prefer grep for searching, read for viewing files.
-  - Use bash only for commands that aren't covered by other tools.
-   
-  # Guardrails
-  - Prefer simple, minimal changes
-  - Search before creating, and reuse existing patterns
-  - No new dependencies without asking
-  `,
+  instructions,
   tools: { read, grep, bash },
   stopWhen: stepCountIs(10),
 });
