@@ -188,7 +188,19 @@ const bash = createBashTool(localOps, createApproval({ mode: "delegated", trust:
  
 const agent = new ToolLoopAgent({
   model: customOpenAI(process.env.OPENAI_MODEL ?? "gpt-4o-mini"),
-  instructions: `You are a coding agent.\nWorking directory: ${cwd}`,
+  instructions: `You are a coding agent working in: ${cwd}
+ 
+  # Agency
+  - USE your tools. Read files, search code, run commands, then answer.
+  - Do NOT explain what you WOULD do. Actually do it.
+  - Prefer grep for searching, read for viewing files.
+  - Use bash only for commands that aren't covered by other tools.
+   
+  # Guardrails
+  - Prefer simple, minimal changes
+  - Search before creating, and reuse existing patterns
+  - No new dependencies without asking
+  `,
   tools: { read, grep, bash },
   stopWhen: stepCountIs(10),
 });
