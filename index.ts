@@ -3,9 +3,10 @@ import { createOpenAI } from "@ai-sdk/openai";
 import { ToolLoopAgent, stepCountIs, tool } from "ai";
 import z from "zod";
 import { resolve } from "node:path";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { execSync } from "node:child_process";
 import { buildSystemPrompt } from "./src/system";
+import { join } from "node:path";
 
 const customOpenAI = createOpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -14,6 +15,11 @@ const customOpenAI = createOpenAI({
 const cwd = process.argv[2] || process.cwd();
 
 console.log("CWD PATH -> ", cwd);
+
+const agentsPath = join(cwd, "AGENTS.md");
+const projectContext = existsSync(agentsPath)
+  ? readFileSync(agentsPath, "utf-8")
+  : undefined;
 
 const SAFE_PREFIXES = [
     "ls", "cat", "echo", "pwd", "which", "find",
@@ -192,6 +198,7 @@ const instructions = buildSystemPrompt({
     workingDirectory: cwd,
     sandboxType: "local",
     toolNames: Object.keys(tools),
+    projectContext
 });
 
 console.log("Instructions: ", instructions);
