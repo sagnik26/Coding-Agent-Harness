@@ -186,18 +186,20 @@ const grep = tool({
 
 const bash = createBashTool(localOps, createApproval({ mode: "delegated", trust: ["pnpm typecheck", "pnpm start", "pnpm test", "git status"] }));
 
+const tools = { read, grep, bash };
+
 const instructions = buildSystemPrompt({
     workingDirectory: cwd,
     sandboxType: "local",
-    toolNames: Object.keys({ read, grep, bash }),
+    toolNames: Object.keys(tools),
 });
 
 console.log("Instructions: ", instructions);
- 
+
 const agent = new ToolLoopAgent({
   model: customOpenAI(process.env.OPENAI_MODEL ?? "gpt-4o-mini"),
   instructions,
-  tools: { read, grep, bash },
+  tools,
   stopWhen: stepCountIs(10),
 });
  
