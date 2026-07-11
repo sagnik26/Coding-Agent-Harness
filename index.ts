@@ -8,6 +8,7 @@ import { execSync } from "node:child_process";
 import { buildSystemPrompt } from "./src/system";
 import { join } from "node:path";
 
+
 const customOpenAI = createOpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
