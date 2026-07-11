@@ -14,6 +14,7 @@ export function createLocalSandbox(dir: string): Sandbox {
           cwd: dir,
           encoding: "utf-8",
           timeout: 30_000,
+          stdio: ["ignore", "pipe", "pipe"],
         });
         return { stdout, exitCode: 0 };
       } catch (e: any) {

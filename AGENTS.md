@@ -1,24 +1,20 @@
 # Project Instructions
- 
-## Commands
-- `pnpm test` runs the test suite
-- `pnpm build` builds for production
-- `pnpm lint` checks code style
- 
-## Architecture
-- Monorepo, packages live in `packages/`
-- Each package has its own `tsconfig.json`
-- Shared types in `packages/shared/`
 
-# Project Instructions
-- All commits must use the format `feat(scope): message`
-- The verification step is `bun test`, not `npm test`
- 
+## Commands
+- `pnpm start . "<prompt>"` runs the coding agent
+- `pnpm typecheck` runs TypeScript (`tsc --noEmit`)
+
+## Architecture
+- Single-package TypeScript agent harness (not a monorepo)
+- Entry point: `index.ts`
+- Tools and sandbox: `src/tools.ts`, `src/sandbox-local.ts`
+- System prompt builder: `src/system.ts`
+
 ## Style
-- Functional components, no classes
+- ESM (`"type": "module"`)
 - Named exports, not default
-- Error messages must be user-facing
- 
+- Tool factories take a `Sandbox` interface
+
 ## Lessons learned
-- Auth middleware must run before rate limiting
-- Don't modify migration files directly, generate new ones
+- Run as `pnpm start . "prompt"` (not `pnpm start -- .`)
+- Use `grep` with `path: "."` to search the whole project
