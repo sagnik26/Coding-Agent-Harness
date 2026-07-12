@@ -98,7 +98,9 @@ export function createBashTool(
       if (needsApproval({ command })) {
         return `Blocked: "${command}" requires approval.`;
       }
-      const { stdout } = await sandbox.exec(command);
+      const { stdout } = await sandbox.exec(command, {
+        onStdout: (chunk) => process.stderr.write(chunk),
+      });
       return stdout || "(no output)";
     },
   });
