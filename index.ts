@@ -5,6 +5,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { buildSystemPrompt } from "./src/system";
 import { createLocalSandbox } from "./src/sandbox-local";
+import { createJustBashSandbox } from "./src/sandbox-just-bash";
 import { createReadTool, createGrepTool, createBashTool } from "./src/tools";
 
 const customOpenAI = createOpenAI({
@@ -13,7 +14,12 @@ const customOpenAI = createOpenAI({
 
 const cwd = process.argv[2] || process.cwd();
 
-const sandbox = createLocalSandbox(cwd);
+const sandboxType = process.env.SANDBOX || "local";
+
+const sandbox =
+  sandboxType === "just-bash"
+    ? await createJustBashSandbox(cwd)
+    : createLocalSandbox(cwd);
 console.error(`Sandbox: ${sandbox.type}`);
 
 const SAFE_PREFIXES = [
