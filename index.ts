@@ -4,6 +4,7 @@ import { ToolLoopAgent, stepCountIs } from "ai";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Sandbox, SandboxLifecycleHooks } from "./src/sandbox";
+import { cloudLifecycle } from "./src/lifecycle-cloud";
 import { buildSystemPrompt } from "./src/system";
 import { createLocalSandbox } from "./src/sandbox-local";
 import { createJustBashSandbox } from "./src/sandbox-just-bash";
@@ -23,16 +24,6 @@ type ApprovalConfig =
   | { mode: "interactive" }
   | { mode: "background" }
   | { mode: "delegated"; trust: string[] };
-
-const cloudLifecycle: SandboxLifecycleHooks = {
-  afterStart: async (sb) => {
-    console.error(`Cloud workspace ready: ${sb.workingDirectory}`);
-  },
-  beforeStop: async () => {
-    console.error("Cloud sandbox stopping...");
-  },
-  // onTimeout: snapshot before VM dies — Module 7
-};
 
 function createApproval(config: ApprovalConfig) {
   return ({ command }: { command: string }) => {
