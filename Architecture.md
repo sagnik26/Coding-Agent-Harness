@@ -10,7 +10,7 @@ A TypeScript coding agent harness built on the [Vercel AI SDK](https://sdk.verce
 
 | Layer | Role |
 |-------|------|
-| **CLI** (`index.ts`) | Parse args, wire sandbox + tools + agent, print output |
+| **CLI** (`index.ts`) | `main()` — factory wiring, agent run, guaranteed sandbox shutdown |
 | **Agent loop** | `ToolLoopAgent` — model thinks, calls tools, repeats until done |
 | **Tools** (`src/tools.ts`) | `read`, `grep`, `bash` — what the model can do |
 | **Sandbox** (`src/sandbox*.ts`) | Abstraction over filesystem + command execution |
@@ -29,12 +29,60 @@ Coding-Agent-Harness/
 └── src/
     ├── sandbox.ts        # Sandbox interface
     ├── sandbox-local.ts  # Local disk + spawn-based exec
-    ├── sandbox-just-bash.ts # In-memory overlay (just-bash)
+    ├── sandbox-just-bash.ts # In-memory overlay
+    ├── sandbox-cloud.ts  # Remote VM (@vercel/sandbox)
     ├── tools.ts          # Tool factories (read, grep, bash)
     └── system.ts         # buildSystemPrompt()
 ```
 
-**Planned** (see `IMPLEMENTATION_GUIDE.md`): `approval.ts`, `skills.ts`, subagents, context pruning, streaming CLI.
+**Planned** (see `IMPLEMENTATION_GUIDE.md`): `approval.ts` extract, `skills.ts`, subagents, context pruning, streaming CLI.
+
+---
+
+## Design patterns
+
+| Pattern | Where | What it does |
+|---------|-------|--------------|
+| **Strategy** | `Sandbox` interface + three backends | Same `readFile` / `exec` API; swap local, just-bash, or cloud via `SANDBOX` |
+| **Factory** | `createSandbox`, `createReadTool`, `createApproval`, etc. | Centralized construction; callers don't build concrete implementations |
+| **Adapter** | `sandbox-cloud.ts` | Wraps `@vercel/sandbox` VM API behind your `Sandbox` interface |
+| **Dependency injection** | `createReadTool(sandbox)`, `createBashTool(sandbox, needsApproval)` | Tools receive dependencies; they don't pick a backend |
+| **Lifecycle hooks** | `SandboxLifecycleHooks` | `afterStart` / `beforeStop` / `onTimeout` — cloud setup and teardown |
+| **Discriminated union** | `ApprovalConfig` | Type-safe approval modes: `interactive` \| `background` \| `delegated` |
+
+```
+Factory (createSandbox)
+    → Strategy (local | just-bash | cloud)
+        → Adapter (cloud only: VercelSandbox → Sandbox)
+            → Tools (read, grep, bash) via DI
+                → ToolLoopAgent
+```
+
+---
+
+## CLI structure (`index.ts`)
+
+| Function | Role |
+|----------|------|
+| `main()` | Entry point — wire sandbox, tools, agent; `try/finally` cleanup |
+| `createSandbox()` | Factory — pick backend from `SANDBOX` env |
+| `createApproval()` | Policy factory — bash command gating |
+| `runAgent()` | Call `agent.generate({ prompt })` |
+| `printAgentResult()` | Log tool trace + model answer + step count |
+| `shutdownSandbox()` | `beforeStop` hook + `sandbox.stop()` |
+
+```ts
+async function main() {
+  const { sandbox, hooks } = await createSandbox(sandboxType, cwd);
+  // ... build tools + agent ...
+  try {
+    await runAgent(agent, prompt);
+  } finally {
+    await shutdownSandbox(sandbox, hooks);  // always runs
+  }
+}
+await main();
+```
 
 ---
 
@@ -56,15 +104,16 @@ Coding-Agent-Harness/
                     │                              │                              │
                     └──────────────────────────────┼──────────────────────────────┘
                                                    ▼
-                                          ┌─────────────────┐
-                                          │ Sandbox (local) │
-                                          │ readFile / exec │
-                                          └────────┬────────┘
-                                                   ▼
-                                          ┌─────────────────┐
-                                          │ Real filesystem │
-                                          │ + child_process │
-                                          └─────────────────┘
+                              ┌────────────────────────────────────┐
+                              │         Sandbox (interface)        │
+                              │         readFile / exec / stop     │
+                              └──────────────┬─────────────────────┘
+                    ┌────────────────────────┼────────────────────────┐
+                    ▼                        ▼                        ▼
+             ┌────────────┐          ┌────────────┐          ┌────────────┐
+             │   local    │          │ just-bash  │          │   cloud    │
+             │ spawn + fs │          │ virtual FS │          │ remote VM  │
+             └────────────┘          └────────────┘          └────────────┘
 ```
 
 ---
@@ -83,17 +132,18 @@ Equivalent to:
 tsx index.ts . "Read the tsconfig.json"
 ```
 
-### Phase 1 — Boot (`index.ts`)
+### Phase 1 — Boot (`main()` in `index.ts`)
 
 | Step | Code | Effect |
 |------|------|--------|
-| Load env | `import "dotenv/config"` | `OPENAI_API_KEY`, optional `OPENAI_MODEL` |
+| Load env | `import "dotenv/config"` | `OPENAI_API_KEY`, `SANDBOX`, optional `OPENAI_MODEL` |
 | Resolve cwd | `process.argv[2] \|\| process.cwd()` | Working directory = `.` |
-| Create sandbox | `createLocalSandbox(cwd)` | Local disk backend |
-| Create tools | `createReadTool`, `createGrepTool`, `createBashTool` | Register tool definitions + executors |
+| Create sandbox | `createSandbox(SANDBOX, cwd)` | Factory picks local / just-bash / cloud |
+| Create tools | `createReadTool`, `createGrepTool`, `createBashTool` | Inject `sandbox` + approval policy |
 | Build prompt | `buildSystemPrompt(...)` | Agency, guardrails, tool list, `AGENTS.md` |
 | Create agent | `new ToolLoopAgent({ model, instructions, tools, stopWhen })` | Agent loop, max 10 steps |
-| Run | `agent.generate({ prompt })` | Start the loop |
+| Run | `runAgent(agent, prompt)` inside `try` | Start the loop |
+| Shutdown | `shutdownSandbox(sandbox, hooks)` in `finally` | Lifecycle hook + `sandbox.stop()` |
 
 Terminal:
 
@@ -189,30 +239,36 @@ Each **step** is one model turn. A step may include zero or more tool calls, the
 ## Sandbox abstraction
 
 ```ts
+interface SandboxLifecycleHooks {
+  afterStart?: (sandbox: Sandbox) => Promise<void>;
+  beforeStop?: (sandbox: Sandbox) => Promise<void>;
+  onTimeout?: (sandbox: Sandbox) => Promise<void>;
+}
+
 interface Sandbox {
   type: string;
   workingDirectory: string;
   readFile(path: string): Promise<string>;
   exec(command: string, options?: ExecOptions): Promise<ExecResult>;
   stop(): Promise<void>;
+  expiresAt?: number;   // cloud only
+  snapshot?(): Promise<{ snapshotId: string }>;  // cloud only
 }
 ```
 
-Tools depend on `Sandbox`, not `fs` or `child_process` directly. Swapping `createLocalSandbox` for `createJustBashSandbox` does not require rewriting tools.
+Tools depend on `Sandbox`, not `fs` or `child_process` directly. Swapping backends does not require rewriting tools.
 
-### just-bash backend (`sandbox-just-bash.ts`)
+### Backend comparison
 
-| Method | Implementation |
-|--------|----------------|
-| `readFile` | `jb.readFile(\`/home/user/project/${path}\`)` |
-| `exec` | `jb.runCommand({ cmd, cwd: MOUNT, detached: true })` |
-| `stop` | `jb.stop()` |
-
-**Mount point:** `overlayRoot` mounts at `/home/user/project`, not at the real path. All virtual paths go through `MOUNT`.
-
-**Copy-on-write:** Reads from real disk; writes stay in memory and disappear when sandbox stops.
-
-**Switch:** `SANDBOX=just-bash pnpm start . "prompt"`
+| | local | just-bash | cloud |
+|--|-------|-----------|-------|
+| **Cost** | Free | Free | Per-minute |
+| **Latency** | Microseconds | Microseconds | Network round-trip per call |
+| **Isolation** | None | Partial (CoW overlay) | Full remote VM |
+| **Persistence** | Permanent | In-memory until stop | Until timeout / snapshot |
+| **`expiresAt`** | — | — | Yes |
+| **`snapshot`** | — | — | Yes |
+| **Env** | `SANDBOX=local` (default) | `SANDBOX=just-bash` | `SANDBOX=cloud` |
 
 ### Local backend (`sandbox-local.ts`)
 
@@ -236,6 +292,46 @@ Tools depend on `Sandbox`, not `fs` or `child_process` directly. Swapping `creat
 | All output at end | Chunked streaming via `onStdout` |
 | Throws on failure | Returns `{ stdout, exitCode }` |
 | Tied to real shell | Fits sandbox interface |
+
+### just-bash backend (`sandbox-just-bash.ts`)
+
+| Method | Implementation |
+|--------|----------------|
+| `readFile` | `jb.readFile(\`/home/user/project/${path}\`)` |
+| `exec` | `jb.runCommand({ cmd, cwd: MOUNT, detached: true })` |
+| `stop` | `jb.stop()` |
+
+**Mount point:** `overlayRoot` mounts at `/home/user/project`, not at the real path.
+
+**Copy-on-write:** Reads from real disk; writes stay in memory and disappear when sandbox stops.
+
+### Cloud backend (`sandbox-cloud.ts`)
+
+Thin **adapter** over `@vercel/sandbox`. Same `Sandbox` shape; methods make network calls.
+
+| Method | Implementation |
+|--------|----------------|
+| `readFile` | `vm.fs.readFile(workspacePath(p), "utf8")` |
+| `exec` | `vm.runCommand({ cmd: "bash", args: ["-c", command], cwd })` |
+| `stop` | `vm.stop()` |
+| `snapshot` | `vm.snapshot()` → `{ snapshotId }` |
+| `expiresAt` | From VM session deadline |
+
+**Workspace:** `/vercel/sandbox` (Vercel Sandbox default cwd).
+
+**On create:** VM starts empty. Seed via `afterStart` hook (git clone, `writeFiles`, `npm install`) — not inside the factory. See [Lesson 4.5 lifecycle hooks](https://vercel.com/academy/build-ai-agent-harness/lifecycle-hooks).
+
+**Restore:** `VERCEL_SNAPSHOT_ID` → `source: { type: "snapshot", snapshotId }`.
+
+**Auth:** `vercel link` + `vercel env pull`, or `VERCEL_TEAM_ID` / `VERCEL_PROJECT_ID` / `VERCEL_TOKEN`.
+
+### Lifecycle hooks
+
+| Hook | When | Typical use |
+|------|------|-------------|
+| `afterStart` | After VM/sandbox created (`sandbox-cloud.ts`) | Git clone, install deps, seed files |
+| `beforeStop` | `shutdownSandbox()` in `finally` | Upload artifacts, log cleanup |
+| `onTimeout` | Not wired yet | Snapshot before VM dies (Module 7) |
 
 ---
 
@@ -290,7 +386,8 @@ Sections:
 |----------|---------|
 | `OPENAI_API_KEY` | OpenAI API authentication |
 | `OPENAI_MODEL` | Optional model override (default: `gpt-4o-mini`) |
-| `SANDBOX` | `local` (default) or `just-bash` |
+| `SANDBOX` | `local` (default), `just-bash`, or `cloud` |
+| `VERCEL_SNAPSHOT_ID` | Optional cloud snapshot restore |
 
 ---
 
@@ -298,5 +395,9 @@ Sections:
 
 | Date | Change |
 |------|--------|
+| 2026-07-08 | Synced `AGENTS.md` and `IMPLEMENTATION_GUIDE.md` with cloud sandbox, CLI refactor, lifecycle hooks |
+| 2026-07-13 | Refactored `index.ts`: `main()`, `runAgent`, `shutdownSandbox`; design patterns docs |
+| 2026-07-13 | Simplified cloud sandbox adapter; lifecycle hooks for cloud |
+| 2026-07-13 | Added cloud sandbox backend (@vercel/sandbox) |
 | 2026-07-13 | Added just-bash in-memory sandbox backend |
 | 2026-07-12 | Initial doc: CLI flow, agent loop, sandbox, tools, example trace |

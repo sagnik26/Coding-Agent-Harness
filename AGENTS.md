@@ -14,6 +14,7 @@ For deeper design detail, see [Architecture.md](./Architecture.md).
 |---------|---------|
 | `pnpm start . "<prompt>"` | Run the agent against this project (local sandbox) |
 | `SANDBOX=just-bash pnpm start . "<prompt>"` | Run agent with in-memory sandbox (writes don't touch disk) |
+| `SANDBOX=cloud pnpm start . "<prompt>"` | Run agent on a remote Vercel Sandbox VM |
 | `pnpm typecheck` | TypeScript check (`tsc --noEmit`) |
 
 **Examples:**
@@ -35,7 +36,12 @@ Create `.env` in the project root (do not commit):
 ```
 OPENAI_API_KEY=your-key-here
 OPENAI_MODEL=gpt-4o-mini   # optional
-SANDBOX=local              # or just-bash for in-memory overlay
+SANDBOX=local              # local | just-bash | cloud
+VERCEL_SNAPSHOT_ID=       # optional: restore cloud sandbox from snapshot
+
+# Cloud sandbox auth (one of):
+# - Run `vercel link` + `vercel env pull` for OIDC token
+# - Or set VERCEL_TEAM_ID, VERCEL_PROJECT_ID, VERCEL_TOKEN
 ```
 
 ---
@@ -54,17 +60,40 @@ Coding-Agent-Harness/
     ├── sandbox.ts        # Sandbox interface
     ├── sandbox-local.ts  # Local disk + spawn-based exec
     ├── sandbox-just-bash.ts # In-memory overlay (just-bash)
+    ├── sandbox-cloud.ts  # Remote VM (@vercel/sandbox)
     ├── tools.ts          # read, grep, bash tool factories
     └── system.ts         # buildSystemPrompt()
 ```
 
 ### Request flow (short)
 
-1. `index.ts` parses `cwd` + prompt from argv
-2. `ToolLoopAgent` sends prompt + tool definitions to the model
-3. Model calls tools (`read`, `grep`, `bash`) as needed
-4. Tools use `Sandbox` — never `fs` or `child_process` directly
-5. Model writes final answer; CLI prints tool trace + response
+1. `main()` parses `cwd` + prompt from argv
+2. `createSandbox()` picks backend (`local` / `just-bash` / `cloud`)
+3. Tools are built with the sandbox injected (`createReadTool(sandbox)`, etc.)
+4. `ToolLoopAgent` sends prompt + tool definitions to the model
+5. Model calls tools (`read`, `grep`, `bash`) as needed
+6. `runAgent()` → `printAgentResult()` logs tool trace + answer
+7. `shutdownSandbox()` in `finally` — always stops sandbox (critical for cloud billing)
+
+### CLI functions (`index.ts`)
+
+| Function | Role |
+|----------|------|
+| `main()` | Wire everything; `try/finally` for cleanup |
+| `createSandbox()` | Factory — `SANDBOX` env → backend |
+| `createApproval()` | Bash command gating (safe-prefix allowlist) |
+| `runAgent()` | `agent.generate({ prompt })` |
+| `printAgentResult()` | Tool trace + answer + step count |
+| `shutdownSandbox()` | `beforeStop` hook + `sandbox.stop()` |
+
+### Design patterns
+
+See [Architecture.md](./Architecture.md#design-patterns) for full detail. Short version:
+
+- **Strategy** — `Sandbox` interface; swap local / just-bash / cloud
+- **Factory** — `createSandbox`, `createReadTool`, `createApproval`
+- **Adapter** — `sandbox-cloud.ts` wraps `@vercel/sandbox`
+- **Dependency injection** — tools receive `sandbox`, not concrete backends
 
 ### Available tools
 
@@ -82,9 +111,18 @@ Coding-Agent-Harness/
 |---------|-----|----------|
 | **local** | default | Real filesystem + `spawn` |
 | **just-bash** | `SANDBOX=just-bash` | Copy-on-write overlay — reads from disk, writes in memory |
+| **cloud** | `SANDBOX=cloud` | Remote Vercel Sandbox VM — isolated, per-minute cost, hard timeout |
 
-- `readFile` — reads through sandbox path translation
-- `exec` — local uses `spawn`; just-bash uses virtual shell at `/home/user/project`
+Lifecycle hooks (`afterStart`, `beforeStop`, `onTimeout`) apply to cloud:
+
+| Hook | Where | Purpose |
+|------|-------|---------|
+| `afterStart` | `createCloudSandbox` | Git clone, `npm install`, seed files |
+| `beforeStop` | `shutdownSandbox()` in `finally` | Cleanup before VM stops |
+| `onTimeout` | Planned (Module 7) | Snapshot before timeout |
+
+- `readFile` — path translation per backend (`cwd`, `/home/user/project`, `/vercel/sandbox`)
+- `exec` — local: `spawn`; just-bash: virtual shell; cloud: `vm.runCommand`
 
 ---
 
@@ -92,7 +130,8 @@ Coding-Agent-Harness/
 
 - **ESM** — `"type": "module"` in `package.json`
 - **Named exports** — no default exports
-- **Tool factories** — take a `Sandbox` interface, not concrete implementations
+- **Tool factories** — take a `Sandbox` interface, not concrete implementations (dependency injection)
+- **Sandbox factory** — `createSandbox()` in `index.ts`; never import backends in `tools.ts`
 - **AI SDK v6 naming** — `instructions` (not `system`), `stopWhen: stepCountIs(n)`, `agent.generate({ prompt })`
 - **Minimal diffs** — only change what the task requires; match existing patterns
 - **No new dependencies** without asking
@@ -125,7 +164,10 @@ After making code changes:
 - `read` tool: path is relative to working directory; output is numbered and capped at 500 lines
 - Live command output streams to **stderr** via `onStdout` — not an error channel, just a side channel for progress
 - `process.stderr.write(chunk)` in bash tool shows output while the command runs; full output is still returned to the model
-- `spawn` + Promise is used instead of `execSync` for non-blocking exec and streaming
+- `spawn` + Promise (local backend) instead of `execSync` — non-blocking exec and streaming
+- `interactive` approval does **not** prompt the user — it auto-allows safe-prefix commands and **blocks** the rest with a string message
+- `echo > file` is allowed (starts with `echo`) — use `SANDBOX=just-bash` for safe write exploration
+- Cloud VM starts **empty** — seed files in `afterStart`, not in `createCloudSandbox`
 
 ---
 
@@ -138,6 +180,9 @@ After making code changes:
 | Sandbox: local | Done |
 | System prompt + AGENTS.md injection | Done |
 | Sandbox: just-bash | Done |
+| Sandbox: cloud | Done |
+| CLI refactor (`main`, `runAgent`, `shutdownSandbox`) | Done |
+| Lifecycle hooks (cloud `afterStart` / `beforeStop`) | Done |
 | Write / edit tools | Planned |
 | Subagents (`task` tool) | Planned |
 | Streaming CLI | Planned |

@@ -41,7 +41,7 @@ A practical build guide for [Vercel Academy's Build Your Own AI Coding Agent Har
 | **Agent loop**    | `ToolLoopAgent` with `read`, `grep`, `write`, `edit`, `bash`, `task`, `askUser`, `todo` |
 | **Safety**        | Execute-level gates → configurable approval (`interactive`, `background`, `delegated`)  |
 | **Prompts**       | Structured system prompt + `AGENTS.md` injection                                        |
-| **Sandbox**       | One `Sandbox` interface; `local`, `just-bash`, and (conceptually) cloud backends        |
+| **Sandbox**       | One `Sandbox` interface; `local`, `just-bash`, and `cloud` backends (see `src/sandbox-cloud.ts`) |
 | **Context**       | `pruneMessages`, bounded tool output, cache control                                     |
 | **Subagents**     | Explorer (read-only, Haiku) and Executor (full tools, Sonnet) via `task` tool           |
 | **Extensibility** | Skills, custom tools, lifecycle events                                                  |
@@ -70,6 +70,15 @@ A practical build guide for [Vercel Academy's Build Your Own AI Coding Agent Har
 - **Modules 8–11**: Mix of building and architecture.
 
 Each step lists **outcome**, **files to create/edit**, **verify commands**, and **done-when** criteria.
+
+### Living docs in this repo
+
+| Doc | Purpose |
+|-----|---------|
+| [Architecture.md](./Architecture.md) | Design patterns, request flow, backend comparison, changelog |
+| [AGENTS.md](./AGENTS.md) | Agent-facing project instructions (injected into system prompt) |
+
+**Current implementation status** (Modules 1–4 core): agent loop, `read`/`grep`/`bash`, local + just-bash + cloud sandboxes, lifecycle hooks, CLI refactor (`main`, `runAgent`, `shutdownSandbox`). See [AGENTS.md § Implementation status](./AGENTS.md#implementation-status).
 
 ---
 
@@ -171,7 +180,8 @@ Final layout after all modules:
 
 ```
 teensycode/
-├── index.ts                 # CLI entry point
+├── index.ts                 # CLI entry point (main, createSandbox, runAgent, shutdownSandbox)
+├── Architecture.md          # Living architecture doc
 ├── package.json
 ├── tsconfig.json
 ├── AGENTS.md                # Optional per-project instructions
@@ -179,10 +189,11 @@ teensycode/
 │   └── auth-patterns/
 │       └── SKILL.md
 └── src/
-    ├── sandbox.ts           # Sandbox interface
-    ├── sandbox-local.ts     # Node fs + child_process
+    ├── sandbox.ts           # Sandbox interface + lifecycle hooks
+    ├── sandbox-local.ts     # Node fs + spawn
     ├── sandbox-just-bash.ts # In-memory overlay
-    ├── approval.ts          # ApprovalConfig discriminated union
+    ├── sandbox-cloud.ts     # @vercel/sandbox adapter
+    ├── approval.ts          # ApprovalConfig discriminated union (planned extract)
     ├── system.ts            # buildSystemPrompt()
     ├── tools.ts             # All tool factories
     ├── skills.ts            # Skill discovery
@@ -647,6 +658,17 @@ const sandbox = process.env.SANDBOX === "just-bash"
 | Latency     | None  | Low            | Network round-trip |
 | Persistence | Yes   | No (in-memory) | Until timeout      |
 
+**Implemented in this repo** (`src/sandbox-cloud.ts`):
+
+- Thin **adapter** over `@vercel/sandbox` — same `Sandbox` interface as local/just-bash
+- `readFile` → `vm.fs.readFile` at `/vercel/sandbox`
+- `exec` → `vm.runCommand({ cmd: "bash", args: ["-c", command] })`
+- `stop`, `snapshot`, `expiresAt` forwarded from the VM
+- VM starts **empty** — do not upload project files in the factory; use `afterStart` (Lesson 4.5)
+- Switch: `SANDBOX=cloud pnpm start . "<prompt>"`
+- Optional restore: `VERCEL_SNAPSHOT_ID`
+
+See [Architecture.md § Cloud backend](./Architecture.md#cloud-backend-sandbox-cloudts) for full detail.
 
 ---
 
@@ -656,13 +678,37 @@ const sandbox = process.env.SANDBOX === "just-bash"
 
 Optional hooks on sandbox creation:
 
-- `afterStart` — clone repo, install deps
+- `afterStart` — clone repo, install deps, seed files
 - `beforeStop` — auto-commit WIP, upload artifacts
 - `onTimeout` — snapshot before VM dies
 
 These map to event bus `session_start` / `session_shutdown` in Module 11.
 
-**Commit:** `feat(sandbox): local and just-bash backends behind Sandbox interface`
+**Implemented in this repo:**
+
+```ts
+// src/sandbox.ts
+export interface SandboxLifecycleHooks {
+  afterStart?: (sandbox: Sandbox) => Promise<void>;
+  beforeStop?: (sandbox: Sandbox) => Promise<void>;
+  onTimeout?: (sandbox: Sandbox) => Promise<void>;
+}
+
+// index.ts — cloudLifecycle + shutdownSandbox() in finally
+const cloudLifecycle: SandboxLifecycleHooks = {
+  afterStart: async (sb) => { /* git clone, npm install */ },
+  beforeStop: async () => { /* cleanup */ },
+};
+
+async function shutdownSandbox(sandbox, hooks) {
+  await hooks?.beforeStop?.(sandbox);
+  await sandbox.stop();
+}
+```
+
+`createCloudSandbox` calls `hooks.afterStart` after the VM is ready. `main()` always calls `shutdownSandbox` in `finally` so cloud VMs are not left running.
+
+**Commit:** `feat(sandbox): local, just-bash, and cloud backends behind Sandbox interface`
 
 ---
 
@@ -1170,32 +1216,34 @@ Run the harness against a **real project** with a non-trivial task:
 
 ### Module 1
 
-- [ ] `ToolLoopAgent` with `read`, `grep`, `bash`
-- [ ] Tool routing works for search / read / shell prompts
-- [ ] Bash blocks dangerous commands with honest messages
+- [x] `ToolLoopAgent` with `read`, `grep`, `bash`
+- [x] Tool routing works for search / read / shell prompts
+- [x] Bash blocks dangerous commands with honest messages
 
 
 
 ### Module 2
 
-- [ ] 5-section tool descriptions
-- [ ] `createBashTool` factory with `BashOperations`
-- [ ] `ApprovalConfig` with three modes
+- [x] 5-section tool descriptions
+- [x] `createBashTool` factory with `BashOperations`
+- [x] `ApprovalConfig` with three modes (in `index.ts`; extract to `approval.ts` planned)
 
 
 
 ### Module 3
 
-- [ ] `buildSystemPrompt()` with Agency + Guardrails
-- [ ] `AGENTS.md` injection when present
+- [x] `buildSystemPrompt()` with Agency + Guardrails
+- [x] `AGENTS.md` injection when present
 
 
 
 ### Module 4
 
-- [ ] `Sandbox` interface; tools use it exclusively
-- [ ] Local and just-bash backends swap via flag
-- [ ] `sandbox.stop()` on exit and SIGINT
+- [x] `Sandbox` interface; tools use it exclusively
+- [x] Local, just-bash, and cloud backends swap via `SANDBOX` env
+- [x] `sandbox.stop()` on exit (`shutdownSandbox` in `finally`)
+- [x] Lifecycle hooks (`afterStart`, `beforeStop`) for cloud
+- [ ] `onTimeout` snapshot hook (Module 7)
 
 
 

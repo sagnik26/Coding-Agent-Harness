@@ -8,6 +8,15 @@ export interface ExecOptions {
   onStdout?: (chunk: string) => void;
 }
 
+export interface SandboxLifecycleHooks {
+  /** Run after the sandbox is created (e.g. clone repo, install deps). */
+  afterStart?: (sandbox: Sandbox) => Promise<void>;
+  /** Run before the sandbox stops (e.g. upload artifacts). */
+  beforeStop?: (sandbox: Sandbox) => Promise<void>;
+  /** Run when the sandbox is about to time out (e.g. snapshot state). */
+  onTimeout?: (sandbox: Sandbox) => Promise<void>;
+}
+
 export interface Sandbox {
   type: string;
   workingDirectory: string;
