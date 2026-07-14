@@ -1,6 +1,6 @@
 import "dotenv/config";
 import { createOpenAI } from "@ai-sdk/openai";
-import { ToolLoopAgent, stepCountIs } from "ai";
+import { ToolLoopAgent, stepCountIs, pruneMessages } from "ai";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Sandbox, SandboxLifecycleHooks } from "./src/sandbox";
@@ -10,6 +10,7 @@ import { createLocalSandbox } from "./src/sandbox-local";
 import { createJustBashSandbox } from "./src/sandbox-just-bash";
 import { createCloudSandbox } from "./src/sandbox-cloud";
 import { createReadTool, createGrepTool, createBashTool } from "./src/tools";
+import { addCacheControl, openaiCacheProviderOptions } from "./src/cache";
 
 const customOpenAI = createOpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -129,6 +130,29 @@ async function main() {
     }),
     tools,
     stopWhen: stepCountIs(10),
+    onStepFinish: ({ usage, stepNumber }) => {
+      const cached = usage.inputTokenDetails?.cacheReadTokens ?? 0;
+      console.error(
+        `Step ${stepNumber}: ${usage.inputTokens} input, ${usage.outputTokens} output, ${cached} cached`,
+      );
+    },
+    prepareCall: async (options) => {
+      const pruned = options.messages
+        ? pruneMessages({
+            messages: options.messages,
+            toolCalls: "before-last-3-messages",
+          })
+        : undefined;
+
+      return {
+        ...options,
+        messages: pruned ? addCacheControl(pruned) : undefined,
+        providerOptions: {
+          ...options.providerOptions,
+          ...openaiCacheProviderOptions(),
+        },
+      };
+    },
   });
 
   const prompt = process.argv.slice(3).join(" ") || "Hello!";

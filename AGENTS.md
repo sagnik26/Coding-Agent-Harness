@@ -61,6 +61,7 @@ Coding-Agent-Harness/
     ├── sandbox-local.ts  # Local disk + spawn-based exec
     ├── sandbox-just-bash.ts # In-memory overlay (just-bash)
     ├── sandbox-cloud.ts  # Remote VM (@vercel/sandbox)
+    ├── cache.ts          # addCacheControl() for cacheable message prefixes
     ├── tools.ts          # read, grep, bash tool factories
     └── system.ts         # buildSystemPrompt()
 ```
@@ -183,6 +184,10 @@ After making code changes:
 | Sandbox: cloud | Done |
 | CLI refactor (`main`, `runAgent`, `shutdownSandbox`) | Done |
 | Lifecycle hooks (cloud `afterStart` / `beforeStop`) | Done |
+| Context: token telemetry (`onStepFinish`) | Done (5.1) |
+| Context: pruneMessages in `prepareCall` | Done (5.2) |
+| Context: bounded tool output (incl. bash 5k) | Done (5.3) |
+| Context: cache control (`addCacheControl`) | Done (5.4) |
 | Write / edit tools | Planned |
 | Subagents (`task` tool) | Planned |
 | Streaming CLI | Planned |

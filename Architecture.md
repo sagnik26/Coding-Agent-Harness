@@ -31,11 +31,12 @@ Coding-Agent-Harness/
     ├── sandbox-local.ts  # Local disk + spawn-based exec
     ├── sandbox-just-bash.ts # In-memory overlay
     ├── sandbox-cloud.ts  # Remote VM (@vercel/sandbox)
+    ├── cache.ts          # addCacheControl() for stable message prefixes
     ├── tools.ts          # Tool factories (read, grep, bash)
     └── system.ts         # buildSystemPrompt()
 ```
 
-**Planned** (see `IMPLEMENTATION_GUIDE.md`): `approval.ts` extract, `skills.ts`, subagents, context pruning, streaming CLI.
+**Planned** (see `IMPLEMENTATION_GUIDE.md`): `approval.ts` extract, `skills.ts`, subagents, streaming CLI.
 
 ---
 
@@ -230,9 +231,99 @@ index.ts prints: tools log → answer → step count
 | `instructions` | `buildSystemPrompt(...)` | Not `system` — AI SDK v6 naming |
 | `tools` | `{ read, grep, bash }` | Zod `inputSchema` per tool |
 | `stopWhen` | `stepCountIs(10)` | Safety cap on loop iterations |
+| `onStepFinish` | token usage log | Lesson 5.1 — measure context growth |
+| `prepareCall` | `pruneMessages(...)` | Lesson 5.2 — drop old tool results |
 | Invoke | `agent.generate({ prompt })` | Not `agent.generate(prompt)` |
 
 Each **step** is one model turn. A step may include zero or more tool calls, then the model sees tool results on the next step.
+
+---
+
+## Context management
+
+Every step re-sends the full message history (system prompt + all prior tool calls/results). Input tokens grow linearly; output stays roughly flat. On long tasks this pollutes attention and can overflow the context window.
+
+### Lesson 5.1 — Measure (`onStepFinish`)
+
+```ts
+onStepFinish: ({ usage, stepNumber }) => {
+  console.error(
+    `Step ${stepNumber}: ${usage.inputTokens} input, ${usage.outputTokens} output`,
+  );
+},
+```
+
+- Logs to **stderr** so telemetry does not mix with the agent answer on stdout
+- Telemetry first — fix (prune / caps / cache) comes in Lessons 5.2–5.4
+
+**Observe the curve:**
+
+```bash
+pnpm start . "Read package.json, then tsconfig.json, then index.ts, then summarize everything"
+```
+
+Expect input tokens to climb each step; output stays relatively small.
+
+| Component | Behavior |
+|-----------|----------|
+| System prompt | Fixed cost every step |
+| Each tool result | Stays in history forever until pruned |
+| After many tool calls | Linear accumulation |
+
+### Lesson 5.2 — Prune old tool results
+
+```ts
+prepareCall: async (options) => ({
+  ...options, // CRITICAL: spread first
+  messages: options.messages
+    ? pruneMessages({
+        messages: options.messages,
+        toolCalls: "before-last-3-messages",
+      })
+    : undefined,
+}),
+```
+
+- Runs **before every model call**; strips tool call/result pairs older than the last 3 messages
+- Original user prompt and recent tool turns are kept
+- Guard `messages` — first call may only have `prompt` (`messages` is `undefined`)
+- With pruning, input tokens **plateau** instead of climbing forever
+
+### Lesson 5.3 — Bounded tool output
+
+| Tool | Cap | Notes |
+|------|-----|-------|
+| `read` | 500 lines | `offset` / `limit` for pagination |
+| `grep` | 50 matches | Total count in truncation suffix |
+| `bash` | 5,000 chars | Tail kept (errors/build failures usually at end) |
+
+### Lesson 5.4 — Cache control (`src/cache.ts`)
+
+```ts
+prepareCall: async (options) => {
+  const pruned = options.messages
+    ? pruneMessages({ messages: options.messages, toolCalls: "before-last-3-messages" })
+    : undefined;
+  return {
+    ...options,
+    messages: pruned ? addCacheControl(pruned) : undefined, // Anthropic message markers
+    providerOptions: { ...options.providerOptions, ...openaiCacheProviderOptions() },
+  };
+},
+```
+
+| Provider | Mechanism |
+|----------|-----------|
+| **Anthropic** | `addCacheControl` — `providerOptions.anthropic.cacheControl` on stable messages |
+| **OpenAI** | `openaiCacheProviderOptions()` — request `promptCacheKey` + `promptCacheRetention` |
+
+OpenAI notes:
+- Caching is mostly automatic for `gpt-4o`+ once the prompt prefix is **≥ ~1024 tokens**
+- `promptCacheKey` improves cache hit routing; it does not reduce the logged `input` count
+- Watch `cached` (`inputTokenDetails.cacheReadTokens`) — savings show there (cheaper billed tokens), not as lower `input`
+- Short prompts remain at `0 cached` by design
+
+`onStepFinish` logs `inputTokenDetails.cacheReadTokens` when the provider reports them.
 
 ---
 
@@ -341,9 +432,19 @@ Thin **adapter** over `@vercel/sandbox`. Same `Sandbox` shape; methods make netw
 |------|-------------|---------|
 | `read` | `readFile` | Read a known file; numbered lines; 500-line cap |
 | `grep` | `exec` | Regex search via `grep -rn`; 50-match cap |
-| `bash` | `exec` | Run shell commands; approval gate |
+| `bash` | `exec` | Run shell commands; approval gate; 5,000-char stdout cap (tail kept) |
 
 Tool **descriptions** are prompts for the model — they route behavior (e.g. read vs grep vs bash).
+
+### Output caps (Lesson 5.3 — Tool Output Design)
+
+| Tool | Cap | Truncation signal |
+|------|-----|-------------------|
+| `read` | 500 lines | `... (truncated at 500 lines)` + `offset`/`limit` pagination |
+| `grep` | 50 matches | `... (N total, showing first 50)` |
+| `bash` | 5,000 chars | Keep **tail**; `... (truncated, showing last 5000 chars)` |
+
+Prevention beats cleanup: prune (5.2) removes old results; caps stop a single result from flooding context.
 
 ### Bash streaming
 
@@ -395,6 +496,10 @@ Sections:
 
 | Date | Change |
 |------|--------|
+| 2026-07-14 | Lesson 5.4: `addCacheControl` after prune in `prepareCall` |
+| 2026-07-14 | Lesson 5.3: bash stdout capped at 5k chars (tail-keep) |
+| 2026-07-14 | Lesson 5.2: `pruneMessages` in `prepareCall` |
+| 2026-07-14 | Lesson 5.1: `onStepFinish` token telemetry; context management section |
 | 2026-07-08 | Synced `AGENTS.md` and `IMPLEMENTATION_GUIDE.md` with cloud sandbox, CLI refactor, lifecycle hooks |
 | 2026-07-13 | Refactored `index.ts`: `main()`, `runAgent`, `shutdownSandbox`; design patterns docs |
 | 2026-07-13 | Simplified cloud sandbox adapter; lifecycle hooks for cloud |

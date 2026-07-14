@@ -79,6 +79,8 @@ export function createBashTool(
   sandbox: Sandbox,
   needsApproval: (input: { command: string }) => boolean,
 ) {
+  const MAX_BASH_CHARS = 5000;
+
   return tool({
     description: `Execute a shell command in the working directory.
         WHEN TO USE: running build commands, installing packages, running tests,
@@ -90,7 +92,8 @@ export function createBashTool(
         DO NOT USE FOR: reading files (use read), searching code (use grep).
 
         USAGE: command is a single shell string. Commands not approved by the
-        approval policy are blocked and return a clear error message.`,
+        approval policy are blocked and return a clear error message.
+        Output is capped at ${MAX_BASH_CHARS} characters (tail kept on truncate).`,
     inputSchema: z.object({
       command: z.string().describe("Shell command to execute"),
     }),
@@ -101,7 +104,11 @@ export function createBashTool(
       const { stdout } = await sandbox.exec(command, {
         onStdout: (chunk) => process.stderr.write(chunk),
       });
-      return stdout || "(no output)";
+      const output = stdout || "(no output)";
+      return output.length > MAX_BASH_CHARS
+        ? output.slice(-MAX_BASH_CHARS) +
+            `\n... (truncated, showing last ${MAX_BASH_CHARS} chars)`
+        : output;
     },
   });
 }
