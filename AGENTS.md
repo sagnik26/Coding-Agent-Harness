@@ -103,8 +103,9 @@ See [Architecture.md](./Architecture.md#design-patterns) for full detail. Short 
 | `read` | Read a known file (numbered lines, 500-line cap) |
 | `grep` | Search across files with regex (50-match cap) |
 | `bash` | Shell commands (approval-gated) |
+| `task` | Delegate research to a read-only explorer subagent |
 
-**Routing:** Read a specific file → `read`. Search patterns → `grep`. Run commands → `bash`.
+**Routing:** Read a specific file → `read`. Search patterns → `grep`. Run commands → `bash`. Multi-file investigation → `task`.
 
 ### Sandbox
 
@@ -188,6 +189,7 @@ After making code changes:
 | Context: pruneMessages in `prepareCall` | Done (5.2) |
 | Context: bounded tool output (incl. bash 5k) | Done (5.3) |
 | Context: cache control (`addCacheControl`) | Done (5.4) |
+| Subagents: explorer via `task` tool | Done (6.2) |
 | Write / edit tools | Planned |
 | Subagents (`task` tool) | Planned |
 | Streaming CLI | Planned |

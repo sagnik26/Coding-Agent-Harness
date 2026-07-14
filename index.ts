@@ -9,7 +9,7 @@ import { buildSystemPrompt } from "./src/system";
 import { createLocalSandbox } from "./src/sandbox-local";
 import { createJustBashSandbox } from "./src/sandbox-just-bash";
 import { createCloudSandbox } from "./src/sandbox-cloud";
-import { createReadTool, createGrepTool, createBashTool } from "./src/tools";
+import { createReadTool, createGrepTool, createBashTool, createTaskTool } from "./src/tools";
 import { addCacheControl, openaiCacheProviderOptions } from "./src/cache";
 
 const customOpenAI = createOpenAI({
@@ -120,15 +120,24 @@ async function main() {
     bash: createBashTool(sandbox, createApproval({ mode: "interactive" })),
   };
 
+  const explorerModel = customOpenAI(
+    process.env.OPENAI_EXPLORER_MODEL ?? process.env.OPENAI_MODEL ?? "gpt-4o-mini",
+  );
+
+  const tools_with_task = {
+    ...tools,
+    task: createTaskTool(sandbox, { read: tools.read, grep: tools.grep }, explorerModel),
+  };
+
   const agent = new ToolLoopAgent({
     model: customOpenAI(process.env.OPENAI_MODEL ?? "gpt-4o-mini"),
     instructions: buildSystemPrompt({
       workingDirectory: cwd,
       sandboxType: sandbox.type,
-      toolNames: Object.keys(tools),
+      toolNames: Object.keys(tools_with_task),
       projectContext,
     }),
-    tools,
+    tools: tools_with_task,
     stopWhen: stepCountIs(10),
     onStepFinish: ({ usage, stepNumber }) => {
       const cached = usage.inputTokenDetails?.cacheReadTokens ?? 0;
