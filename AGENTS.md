@@ -103,9 +103,9 @@ See [Architecture.md](./Architecture.md#design-patterns) for full detail. Short 
 | `read` | Read a known file (numbered lines, 500-line cap) |
 | `grep` | Search across files with regex (50-match cap) |
 | `bash` | Shell commands (approval-gated) |
-| `task` | Delegate research to a read-only explorer subagent |
+| `task` | Delegate research to read-only explorer(s); pass multiple descriptions for parallel research |
 
-**Routing:** Read a specific file → `read`. Search patterns → `grep`. Run commands → `bash`. Multi-file investigation → `task`.
+**Routing:** Read a specific file → `read`. Search patterns → `grep`. Run commands → `bash`. Multi-file investigation → `task`. Independent multi-area questions → one `task` with several descriptions; parent synthesizes.
 
 ### Sandbox
 

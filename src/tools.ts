@@ -119,34 +119,56 @@ export function createTaskTool(
   model: any,
 ): any {
   return tool({
-    description: `Delegate research to a read-only subagent.
-WHEN TO USE: investigating a codebase, finding patterns, gathering context
-  across many files.
-WHEN NOT TO USE: making changes (the subagent cannot write or run commands).
-DO NOT USE FOR: tasks that need decisions or askUser interactions.`,
+    description: `Delegate research to read-only explorer subagent(s).
+      WHEN TO USE: investigating a codebase, finding patterns, gathering context
+        across many files. If the question splits into independent threads, pass one
+        description per thread in a single call — they run in parallel.
+      USAGE: each description must be self-contained (explorers share no memory).
+        Parent synthesizes the joined results; explorers only report.
+      WHEN NOT TO USE: making changes (cannot write or run commands); dependent
+        follow-ups (find X, then inspect X) — keep those sequential.
+      DO NOT USE FOR: tasks that need decisions or askUser interactions.`,
     inputSchema: z.object({
-      description: z.string().describe("What the subagent should investigate"),
+      descriptions: z
+        .array(z.string())
+        .min(1)
+        .describe(
+          "Independent research threads; use multiple when questions do not depend on each other",
+        ),
     }),
-    execute: async ({ description }) => {
-      const explorer = new ToolLoopAgent({
-        model,
-        instructions: `You are an explorer agent. Investigate and report back concisely.
+    execute: async ({ descriptions }) => {
+      const runExplorer = async (prompt: string, index: number) => {
+        const explorer = new ToolLoopAgent({
+          model,
+          instructions: `You are an explorer agent. Investigate and report back concisely.
 Working directory: ${sandbox.workingDirectory}`,
-        tools: { read: parentTools.read, grep: parentTools.grep },
-        stopWhen: stepCountIs(5),
-      });
+          tools: { read: parentTools.read, grep: parentTools.grep },
+          stopWhen: stepCountIs(5),
+        });
 
-      try {
-        const { text, steps } = await explorer.generate({ prompt: description });
-        console.error(
-          `[task] explorer finished: ${steps.length} steps, ${text?.length ?? 0} chars`,
-        );
-        return text
-          ? `[Explorer: ${steps.length} steps]\n${text}`
-          : "(no response from subagent)";
-      } catch (e: any) {
-        return `Subagent error: ${e.message}`;
-      }
+        try {
+          const { text, steps } = await explorer.generate({ prompt });
+          console.error(
+            `[task] explorer ${index + 1}/${descriptions.length} finished: ${steps.length} steps, ${text?.length ?? 0} chars`,
+          );
+          return text
+            ? `[Explorer: ${steps.length} steps]\n${text}`
+            : "(no response from subagent)";
+        } catch (e: any) {
+          return `Subagent error: ${e.message}`;
+        }
+      };
+
+      const results = await Promise.all(
+        descriptions.map((d, i) => runExplorer(d, i)),
+      );
+
+      return results
+        .map((result, i) => {
+          const label = descriptions[i].slice(0, 80);
+          return `=== Explorer ${i + 1}/${descriptions.length}: ${label} ===\n${result}`;
+        })
+        .join("\n\n");
     },
   });
 }
