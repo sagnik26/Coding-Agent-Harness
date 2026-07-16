@@ -61,8 +61,9 @@ Coding-Agent-Harness/
     ├── sandbox-local.ts  # Local disk + spawn-based exec
     ├── sandbox-just-bash.ts # In-memory overlay (just-bash)
     ├── sandbox-cloud.ts  # Remote VM (@vercel/sandbox)
+    ├── approval.ts       # createApproval (interactive / delegated / background)
     ├── cache.ts          # addCacheControl() for cacheable message prefixes
-    ├── tools.ts          # read, grep, bash tool factories
+    ├── tools.ts          # read, grep, bash, task tool factories
     └── system.ts         # buildSystemPrompt()
 ```
 
@@ -82,7 +83,7 @@ Coding-Agent-Harness/
 |----------|------|
 | `main()` | Wire everything; `try/finally` for cleanup |
 | `createSandbox()` | Factory — `SANDBOX` env → backend |
-| `createApproval()` | Bash command gating (safe-prefix allowlist) |
+| `createApproval()` | Bash command gating (`src/approval.ts` — interactive / delegated) |
 | `runAgent()` | `agent.generate({ prompt })` |
 | `printAgentResult()` | Tool trace + answer + step count |
 | `shutdownSandbox()` | `beforeStop` hook + `sandbox.stop()` |
@@ -103,9 +104,9 @@ See [Architecture.md](./Architecture.md#design-patterns) for full detail. Short 
 | `read` | Read a known file (numbered lines, 500-line cap) |
 | `grep` | Search across files with regex (50-match cap) |
 | `bash` | Shell commands (approval-gated) |
-| `task` | Delegate research to read-only explorer(s); pass multiple descriptions for parallel research |
+| `task` | Delegate to explorer (read-only, parallel descriptions) or executor (delegated bash) |
 
-**Routing:** Read a specific file → `read`. Search patterns → `grep`. Run commands → `bash`. Multi-file investigation → `task`. Independent multi-area questions → one `task` with several descriptions; parent synthesizes.
+**Routing:** Read a specific file → `read`. Search patterns → `grep`. Run commands → `bash`. Multi-file investigation → `task` (explorer). Independent multi-area research → one explorer `task` with several descriptions. Trusted implementation/verification → `task` with `subagentType: "executor"` and one description; parent synthesizes / decides.
 
 ### Sandbox
 
@@ -190,6 +191,7 @@ After making code changes:
 | Context: bounded tool output (incl. bash 5k) | Done (5.3) |
 | Context: cache control (`addCacheControl`) | Done (5.4) |
 | Subagents: explorer via `task` tool | Done (6.2) |
+| Subagents: executor via `task` tool | Done (6.3) |
 | Write / edit tools | Planned |
 | Subagents (`task` tool) | Planned |
 | Streaming CLI | Planned |

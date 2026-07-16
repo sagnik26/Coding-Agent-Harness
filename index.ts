@@ -10,33 +10,12 @@ import { createLocalSandbox } from "./src/sandbox-local";
 import { createJustBashSandbox } from "./src/sandbox-just-bash";
 import { createCloudSandbox } from "./src/sandbox-cloud";
 import { createReadTool, createGrepTool, createBashTool, createTaskTool } from "./src/tools";
+import { createApproval } from "./src/approval";
 import { addCacheControl, openaiCacheProviderOptions } from "./src/cache";
 
 const customOpenAI = createOpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
-
-const SAFE_PREFIXES = [
-  "ls", "cat", "echo", "pwd", "which", "find",
-  "head", "tail", "wc", "git log", "git status", "git diff",
-];
-
-type ApprovalConfig =
-  | { mode: "interactive" }
-  | { mode: "background" }
-  | { mode: "delegated"; trust: string[] };
-
-function createApproval(config: ApprovalConfig) {
-  return ({ command }: { command: string }) => {
-    if (config.mode === "background") return false;
-
-    if (config.mode === "delegated") {
-      return !config.trust.some((p) => command.trim().startsWith(p));
-    }
-
-    return !SAFE_PREFIXES.some((p) => command.trim().startsWith(p));
-  };
-}
 
 async function createSandbox(
   type: string,
@@ -123,10 +102,17 @@ async function main() {
   const explorerModel = customOpenAI(
     process.env.OPENAI_EXPLORER_MODEL ?? process.env.OPENAI_MODEL ?? "gpt-4o-mini",
   );
+  const executorModel = customOpenAI(
+    process.env.OPENAI_EXECUTOR_MODEL ?? process.env.OPENAI_MODEL ?? "gpt-4o-mini",
+  );
 
   const tools_with_task = {
     ...tools,
-    task: createTaskTool(sandbox, { read: tools.read, grep: tools.grep }, explorerModel),
+    task: createTaskTool(
+      sandbox,
+      { read: tools.read, grep: tools.grep },
+      { explorer: explorerModel, executor: executorModel },
+    ),
   };
 
   const agent = new ToolLoopAgent({

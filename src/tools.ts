@@ -1,6 +1,7 @@
 import { tool, ToolLoopAgent, stepCountIs } from "ai";
 import { resolve } from "node:path";
 import type { Sandbox } from "./sandbox";
+import { createApproval } from "./approval";
 import z from "zod";
  
 export function createReadTool(sandbox: Sandbox) {
@@ -113,35 +114,82 @@ export function createBashTool(
   });
 }
 
+const EXECUTOR_TRUST = ["npm test", "npm run build", "npx tsc", "pnpm typecheck"];
+
 export function createTaskTool(
   sandbox: Sandbox,
   parentTools: { read: any; grep: any },
-  model: any,
+  models: { explorer: any; executor: any },
 ): any {
   return tool({
-    description: `Delegate research to read-only explorer subagent(s).
-      WHEN TO USE: investigating a codebase, finding patterns, gathering context
-        across many files. If the question splits into independent threads, pass one
-        description per thread in a single call — they run in parallel.
-      USAGE: each description must be self-contained (explorers share no memory).
-        Parent synthesizes the joined results; explorers only report.
-      WHEN NOT TO USE: making changes (cannot write or run commands); dependent
-        follow-ups (find X, then inspect X) — keep those sequential.
-      DO NOT USE FOR: tasks that need decisions or askUser interactions.`,
+    description: `Delegate work to a subagent.
+        explorer (default): read-only research with a fast model. Pass multiple
+          descriptions for independent threads — they run in parallel.
+        executor: implementation / verification with a stronger model and delegated
+          bash (trusted: npm test, npm run build, npx tsc, pnpm typecheck). Use exactly
+          one description. Provide goal, procedure, constraints, and verification steps.
+
+        WHEN TO USE: research across many files (explorer), bulk implementation or
+          trusted verification commands (executor).
+        WHEN NOT TO USE: ambiguous requirements (parent decides / askUser),
+          architectural decisions (the parent decides).
+        DO NOT USE FOR: tasks that need the parent to ask the user.`,
     inputSchema: z.object({
       descriptions: z
         .array(z.string())
         .min(1)
         .describe(
-          "Independent research threads; use multiple when questions do not depend on each other",
+          "Task instructions for the subagent. Explorer: one per independent thread. Executor: exactly one.",
         ),
+      subagentType: z
+        .enum(["explorer", "executor"])
+        .default("explorer")
+        .describe("Subagent role"),
     }),
-    execute: async ({ descriptions }) => {
+    execute: async ({ descriptions, subagentType }) => {
+      if (subagentType === "executor") {
+        if (descriptions.length !== 1) {
+          return "Executor error: pass exactly one description (parallel executors are not supported).";
+        }
+
+        const executorBash = createBashTool(
+          sandbox,
+          createApproval({ mode: "delegated", trust: EXECUTOR_TRUST }),
+        );
+
+        const executor = new ToolLoopAgent({
+          model: models.executor,
+          instructions: `You are an executor agent. Follow instructions precisely.
+Working directory: ${sandbox.workingDirectory}
+Do NOT ask questions. Do NOT explore beyond what's needed. Execute the task.`,
+          tools: {
+            read: parentTools.read,
+            grep: parentTools.grep,
+            bash: executorBash,
+          },
+          stopWhen: stepCountIs(15),
+        });
+
+        try {
+          const { text, steps } = await executor.generate({
+            prompt: descriptions[0],
+          });
+          console.error(
+            `[task] executor finished: ${steps.length} steps, ${text?.length ?? 0} chars`,
+          );
+          return text
+            ? `[Executor: ${steps.length} steps]\n${text}`
+            : "(no response from executor)";
+        } catch (e: any) {
+          return `Executor error: ${e.message}`;
+        }
+      }
+
       const runExplorer = async (prompt: string, index: number) => {
         const explorer = new ToolLoopAgent({
-          model,
+          model: models.explorer,
           instructions: `You are an explorer agent. Investigate and report back concisely.
-Working directory: ${sandbox.workingDirectory}`,
+            Working directory: ${sandbox.workingDirectory}`,
           tools: { read: parentTools.read, grep: parentTools.grep },
           stopWhen: stepCountIs(5),
         });
@@ -153,9 +201,9 @@ Working directory: ${sandbox.workingDirectory}`,
           );
           return text
             ? `[Explorer: ${steps.length} steps]\n${text}`
-            : "(no response from subagent)";
+            : "(no response from explorer)";
         } catch (e: any) {
-          return `Subagent error: ${e.message}`;
+          return `Explorer error: ${e.message}`;
         }
       };
 
