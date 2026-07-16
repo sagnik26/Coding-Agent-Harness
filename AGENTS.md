@@ -192,6 +192,7 @@ After making code changes:
 | Context: cache control (`addCacheControl`) | Done (5.4) |
 | Subagents: explorer via `task` tool | Done (6.2) |
 | Subagents: executor via `task` tool | Done (6.3) |
+| Subagents: task tool as router | Done (6.4) |
 | Write / edit tools | Planned |
 | Subagents (`task` tool) | Planned |
 | Streaming CLI | Planned |

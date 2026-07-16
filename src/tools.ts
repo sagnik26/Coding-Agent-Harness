@@ -116,6 +116,61 @@ export function createBashTool(
 
 const EXECUTOR_TRUST = ["npm test", "npm run build", "npx tsc", "pnpm typecheck"];
 
+function buildExplorer(
+  sandbox: Sandbox,
+  parentTools: { read: any; grep: any },
+  model: any,
+) {
+  return new ToolLoopAgent({
+    model,
+    instructions: `You are an explorer agent. Investigate and report back concisely.
+      Working directory: ${sandbox.workingDirectory}`,
+    tools: { read: parentTools.read, grep: parentTools.grep },
+    stopWhen: stepCountIs(5),
+  });
+}
+
+function buildExecutor(
+  sandbox: Sandbox,
+  parentTools: { read: any; grep: any },
+  model: any,
+) {
+  const executorBash = createBashTool(
+    sandbox,
+    createApproval({ mode: "delegated", trust: EXECUTOR_TRUST }),
+  );
+  return new ToolLoopAgent({
+    model,
+    instructions: `You are an executor agent. Follow instructions precisely.
+      Working directory: ${sandbox.workingDirectory}
+      Do NOT ask questions. Do NOT explore beyond what's needed. Execute the task.`,
+    tools: {
+      read: parentTools.read,
+      grep: parentTools.grep,
+      bash: executorBash,
+    },
+    stopWhen: stepCountIs(15),
+  });
+}
+
+async function runSubagent(
+  role: string,
+  agent: { generate: (opts: { prompt: string }) => Promise<{ text: string; steps: unknown[] }> },
+  description: string,
+) {
+  try {
+    const { text, steps } = await agent.generate({ prompt: description });
+    console.error(
+      `[task] ${role.toLowerCase()} finished: ${steps.length} steps, ${text?.length ?? 0} chars`,
+    );
+    return text
+      ? `[${role}: ${steps.length} steps]\n${text}`
+      : `(no response from ${role.toLowerCase()})`;
+  } catch (e: any) {
+    return `${role} error: ${e.message}`;
+  }
+}
+
 export function createTaskTool(
   sandbox: Sandbox,
   parentTools: { read: any; grep: any },
@@ -123,17 +178,16 @@ export function createTaskTool(
 ): any {
   return tool({
     description: `Delegate work to a subagent.
-        explorer (default): read-only research with a fast model. Pass multiple
-          descriptions for independent threads — they run in parallel.
-        executor: implementation / verification with a stronger model and delegated
-          bash (trusted: npm test, npm run build, npx tsc, pnpm typecheck). Use exactly
-          one description. Provide goal, procedure, constraints, and verification steps.
+      Explorer (default): read-only research with a fast model. Pass multiple
+        descriptions for independent threads — they run in parallel.
+      Executor: implementation with a stronger model and delegated bash. Use for
+        focused changes with explicit instructions and a known verification step.
+        Use exactly one description.
 
-        WHEN TO USE: research across many files (explorer), bulk implementation or
-          trusted verification commands (executor).
-        WHEN NOT TO USE: ambiguous requirements (parent decides / askUser),
-          architectural decisions (the parent decides).
-        DO NOT USE FOR: tasks that need the parent to ask the user.`,
+      WHEN TO USE: research across many files (explorer), bulk implementation (executor).
+      WHEN NOT TO USE: ambiguous requirements (use askUser), architectural decisions
+        (the parent decides).
+      DO NOT USE FOR: single-step tasks the parent can do directly.`,
     inputSchema: z.object({
       descriptions: z
         .array(z.string())
@@ -151,64 +205,21 @@ export function createTaskTool(
         if (descriptions.length !== 1) {
           return "Executor error: pass exactly one description (parallel executors are not supported).";
         }
-
-        const executorBash = createBashTool(
-          sandbox,
-          createApproval({ mode: "delegated", trust: EXECUTOR_TRUST }),
+        return runSubagent(
+          "Executor",
+          buildExecutor(sandbox, parentTools, models.executor),
+          descriptions[0],
         );
-
-        const executor = new ToolLoopAgent({
-          model: models.executor,
-          instructions: `You are an executor agent. Follow instructions precisely.
-Working directory: ${sandbox.workingDirectory}
-Do NOT ask questions. Do NOT explore beyond what's needed. Execute the task.`,
-          tools: {
-            read: parentTools.read,
-            grep: parentTools.grep,
-            bash: executorBash,
-          },
-          stopWhen: stepCountIs(15),
-        });
-
-        try {
-          const { text, steps } = await executor.generate({
-            prompt: descriptions[0],
-          });
-          console.error(
-            `[task] executor finished: ${steps.length} steps, ${text?.length ?? 0} chars`,
-          );
-          return text
-            ? `[Executor: ${steps.length} steps]\n${text}`
-            : "(no response from executor)";
-        } catch (e: any) {
-          return `Executor error: ${e.message}`;
-        }
       }
 
-      const runExplorer = async (prompt: string, index: number) => {
-        const explorer = new ToolLoopAgent({
-          model: models.explorer,
-          instructions: `You are an explorer agent. Investigate and report back concisely.
-            Working directory: ${sandbox.workingDirectory}`,
-          tools: { read: parentTools.read, grep: parentTools.grep },
-          stopWhen: stepCountIs(5),
-        });
-
-        try {
-          const { text, steps } = await explorer.generate({ prompt });
-          console.error(
-            `[task] explorer ${index + 1}/${descriptions.length} finished: ${steps.length} steps, ${text?.length ?? 0} chars`,
-          );
-          return text
-            ? `[Explorer: ${steps.length} steps]\n${text}`
-            : "(no response from explorer)";
-        } catch (e: any) {
-          return `Explorer error: ${e.message}`;
-        }
-      };
-
       const results = await Promise.all(
-        descriptions.map((d, i) => runExplorer(d, i)),
+        descriptions.map((prompt) =>
+          runSubagent(
+            "Explorer",
+            buildExplorer(sandbox, parentTools, models.explorer),
+            prompt,
+          ),
+        ),
       );
 
       return results
