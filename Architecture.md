@@ -349,6 +349,17 @@ interface Sandbox {
 
 Tools depend on `Sandbox`, not `fs` or `child_process` directly. Swapping backends does not require rewriting tools.
 
+### Chaos mode (Module 7)
+
+`wrapWithChaos` (`src/chaos.ts`) injects one random failure per session when `CHAOS=1` (or `--chaos`) is set:
+
+| Mode | Failure |
+|------|---------|
+| `kill-mid-command` | First `exec` → exit 137 |
+| `stale-handle` | First `exec` returns garbage |
+| `state-divergence` | `getStatus` reports `hibernated` |
+| `skip-status` | `getStatus` returns a stale `active` |
+
 ### Backend comparison
 
 | | local | just-bash | cloud |
@@ -496,6 +507,7 @@ Sections:
 
 | Date | Change |
 |------|--------|
+| 2026-07-18 | Module 7: simple `--chaos` wrapper (`src/chaos.ts`) |
 | 2026-07-14 | Lesson 5.4: `addCacheControl` after prune in `prepareCall` |
 | 2026-07-14 | Lesson 5.3: bash stdout capped at 5k chars (tail-keep) |
 | 2026-07-14 | Lesson 5.2: `pruneMessages` in `prepareCall` |

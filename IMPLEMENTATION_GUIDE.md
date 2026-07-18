@@ -922,6 +922,17 @@ Two timeouts: idle timeout and absolute max lifetime. Activity resets idle timer
 - Snapshot before timeout
 - Don't trust restore without verifying snapshot age
 
+### Chaos mode
+
+`--chaos` / `CHAOS=1` injects **one** random failure per session so you see which lifecycle gotcha you forgot:
+
+```bash
+CHAOS=1 pnpm start . "List files with ls"
+CHAOS_MODE=stale-handle pnpm start . "List files with ls"
+```
+
+Modes: `kill-mid-command` · `stale-handle` · `state-divergence` · `skip-status` — see `src/chaos.ts`.
+
 ---
 
 
@@ -1243,7 +1254,7 @@ Run the harness against a **real project** with a non-trivial task:
 - [x] Local, just-bash, and cloud backends swap via `SANDBOX` env
 - [x] `sandbox.stop()` on exit (`shutdownSandbox` in `finally`)
 - [x] Lifecycle hooks (`afterStart`, `beforeStop`) for cloud
-- [ ] `onTimeout` snapshot hook (Module 7)
+- [x] Chaos mode (`--chaos`) — one injected failure per session
 
 
 

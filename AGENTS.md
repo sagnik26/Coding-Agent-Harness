@@ -15,6 +15,7 @@ For deeper design detail, see [Architecture.md](./Architecture.md).
 | `pnpm start . "<prompt>"` | Run the agent against this project (local sandbox) |
 | `SANDBOX=just-bash pnpm start . "<prompt>"` | Run agent with in-memory sandbox (writes don't touch disk) |
 | `SANDBOX=cloud pnpm start . "<prompt>"` | Run agent on a remote Vercel Sandbox VM |
+| `CHAOS=1 pnpm start . "<prompt>"` | Inject one random sandbox failure this session |
 | `pnpm typecheck` | TypeScript check (`tsc --noEmit`) |
 
 **Examples:**
@@ -23,6 +24,8 @@ For deeper design detail, see [Architecture.md](./Architecture.md).
 pnpm start . "Read the tsconfig.json"
 pnpm start . "Find all TODO comments in this project"
 pnpm start . "List all files in this directory"
+CHAOS=1 pnpm start . "List files with ls"
+CHAOS_MODE=kill-mid-command pnpm start . "List files with ls"
 ```
 
 **Note:** Use `pnpm start . "prompt"` — not `pnpm start -- . "prompt"` (pnpm passes `--` into argv).
@@ -61,6 +64,8 @@ Coding-Agent-Harness/
     ├── sandbox-local.ts  # Local disk + spawn-based exec
     ├── sandbox-just-bash.ts # In-memory overlay (just-bash)
     ├── sandbox-cloud.ts  # Remote VM (@vercel/sandbox)
+    ├── chaos.ts          # --chaos failure injection
+    ├── lifecycle-cloud.ts # Cloud afterStart / beforeStop / onTimeout
     ├── approval.ts       # createApproval (interactive / delegated / background)
     ├── cache.ts          # addCacheControl() for cacheable message prefixes
     ├── tools.ts          # read, grep, bash, task tool factories
@@ -126,6 +131,7 @@ Lifecycle hooks (`afterStart`, `beforeStop`, `onTimeout`) apply to cloud:
 
 - `readFile` — path translation per backend (`cwd`, `/home/user/project`, `/vercel/sandbox`)
 - `exec` — local: `spawn`; just-bash: virtual shell; cloud: `vm.runCommand`
+- Chaos: `CHAOS=1 pnpm start . "<prompt>"` — one random failure (`src/chaos.ts`)
 
 ---
 
@@ -186,6 +192,7 @@ After making code changes:
 | Sandbox: cloud | Done |
 | CLI refactor (`main`, `runAgent`, `shutdownSandbox`) | Done |
 | Lifecycle hooks (cloud `afterStart` / `beforeStop`) | Done |
+| Lifecycle: chaos mode (`--chaos`) | Done (7) |
 | Context: token telemetry (`onStepFinish`) | Done (5.1) |
 | Context: pruneMessages in `prepareCall` | Done (5.2) |
 | Context: bounded tool output (incl. bash 5k) | Done (5.3) |

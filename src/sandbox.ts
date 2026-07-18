@@ -25,4 +25,6 @@ export interface Sandbox {
   stop(): Promise<void>;
   expiresAt?: number;
   snapshot?(): Promise<{ snapshotId: string }>;
+  /** Optional — used by chaos mode and cloud lifecycle checks. */
+  getStatus?(): Promise<{ state: string; expiresAt?: number }>;
 }

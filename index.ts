@@ -12,6 +12,7 @@ import { createCloudSandbox } from "./src/sandbox-cloud";
 import { createReadTool, createGrepTool, createBashTool, createTaskTool } from "./src/tools";
 import { createApproval } from "./src/approval";
 import { addCacheControl, openaiCacheProviderOptions } from "./src/cache";
+import { parseChaosArgs, wrapWithChaos } from "./src/chaos";
 
 const customOpenAI = createOpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -78,9 +79,19 @@ async function shutdownSandbox(sandbox: Sandbox, hooks?: SandboxLifecycleHooks) 
 }
 
 async function main() {
+  const { chaos, mode } = parseChaosArgs(process.argv.slice(2));
   const cwd = process.argv[2] || process.cwd();
+  const prompt = process.argv.slice(3).join(" ") || "Hello!";
   const sandboxType = process.env.SANDBOX || "local";
-  const { sandbox, hooks } = await createSandbox(sandboxType, cwd);
+
+  let { sandbox, hooks } = await createSandbox(sandboxType, cwd);
+  if (chaos) {
+    sandbox = wrapWithChaos(sandbox, mode);
+    if (sandbox.getStatus) {
+      const status = await sandbox.getStatus();
+      console.error(`[chaos] getStatus → ${status.state}`);
+    }
+  }
 
   console.error(`Sandbox: ${sandbox.type}`);
   if (sandbox.expiresAt) {
@@ -149,8 +160,6 @@ async function main() {
       };
     },
   });
-
-  const prompt = process.argv.slice(3).join(" ") || "Hello!";
 
   try {
     await runAgent(agent, prompt);
