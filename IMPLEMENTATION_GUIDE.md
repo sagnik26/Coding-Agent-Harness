@@ -1275,8 +1275,9 @@ Run the harness against a **real project** with a non-trivial task:
 
 ### Module 8
 
-- [ ] `askUser` for ambiguous tasks
-- [ ] Direct action for specific tasks
+- [x] `askUser` for ambiguous tasks
+- [x] Direct action for specific tasks
+- [x] Approval config vs events (concept; events deferred to Module 11)
 
 
 

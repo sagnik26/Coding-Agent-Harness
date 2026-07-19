@@ -12,9 +12,9 @@ A TypeScript coding agent harness built on the [Vercel AI SDK](https://sdk.verce
 |-------|------|
 | **CLI** (`index.ts`) | `main()` — factory wiring, agent run, guaranteed sandbox shutdown |
 | **Agent loop** | `ToolLoopAgent` — model thinks, calls tools, repeats until done |
-| **Tools** (`src/tools.ts`) | `read`, `grep`, `bash` — what the model can do |
+| **Tools** (`src/tools.ts`) | `read`, `grep`, `bash`, `task`, `askUser` — what the model can do |
 | **Sandbox** (`src/sandbox*.ts`) | Abstraction over filesystem + command execution |
-| **System prompt** (`src/system.ts`) | Instructions, guardrails, optional `AGENTS.md` injection |
+| **System prompt** (`src/system.ts`) | Instructions, guardrails, ambiguity protocol, optional `AGENTS.md` injection |
 
 ---
 
@@ -32,11 +32,11 @@ Coding-Agent-Harness/
     ├── sandbox-just-bash.ts # In-memory overlay
     ├── sandbox-cloud.ts  # Remote VM (@vercel/sandbox)
     ├── cache.ts          # addCacheControl() for stable message prefixes
-    ├── tools.ts          # Tool factories (read, grep, bash)
+    ├── tools.ts          # Tool factories (read, grep, bash, task, askUser)
     └── system.ts         # buildSystemPrompt()
 ```
 
-**Planned** (see `IMPLEMENTATION_GUIDE.md`): `approval.ts` extract, `skills.ts`, subagents, streaming CLI.
+**Planned** (see `IMPLEMENTATION_GUIDE.md`): write/edit tools, skills, streaming CLI, Module 11 event-based approval.
 
 ---
 
@@ -51,11 +51,13 @@ Coding-Agent-Harness/
 | **Lifecycle hooks** | `SandboxLifecycleHooks` | `afterStart` / `beforeStop` / `onTimeout` — cloud setup and teardown |
 | **Discriminated union** | `ApprovalConfig` | Type-safe approval modes: `interactive` \| `background` \| `delegated` |
 
+**Approval layers (Module 8.2):** The **config** layer (`src/approval.ts`) answers *who decides* for a session. A future **event** layer (Module 11) answers *what policies apply* — e.g. block writes to `.env` regardless of mode. They combine for defense in depth; events are not implemented yet.
+
 ```
 Factory (createSandbox)
     → Strategy (local | just-bash | cloud)
         → Adapter (cloud only: VercelSandbox → Sandbox)
-            → Tools (read, grep, bash) via DI
+            → Tools (read, grep, bash, task, askUser) via DI
                 → ToolLoopAgent
 ```
 
@@ -140,8 +142,8 @@ tsx index.ts . "Read the tsconfig.json"
 | Load env | `import "dotenv/config"` | `OPENAI_API_KEY`, `SANDBOX`, optional `OPENAI_MODEL` |
 | Resolve cwd | `process.argv[2] \|\| process.cwd()` | Working directory = `.` |
 | Create sandbox | `createSandbox(SANDBOX, cwd)` | Factory picks local / just-bash / cloud |
-| Create tools | `createReadTool`, `createGrepTool`, `createBashTool` | Inject `sandbox` + approval policy |
-| Build prompt | `buildSystemPrompt(...)` | Agency, guardrails, tool list, `AGENTS.md` |
+| Create tools | `createReadTool`, `createGrepTool`, `createBashTool`, `createAskUserTool`, `createTaskTool` | Inject `sandbox` + approval policy |
+| Build prompt | `buildSystemPrompt(...)` | Agency, guardrails, ambiguity protocol, tool list, `AGENTS.md` |
 | Create agent | `new ToolLoopAgent({ model, instructions, tools, stopWhen })` | Agent loop, max 10 steps |
 | Run | `runAgent(agent, prompt)` inside `try` | Start the loop |
 | Shutdown | `shutdownSandbox(sandbox, hooks)` in `finally` | Lifecycle hook + `sandbox.stop()` |

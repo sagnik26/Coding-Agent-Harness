@@ -9,7 +9,7 @@ import { buildSystemPrompt } from "./src/system";
 import { createLocalSandbox } from "./src/sandbox-local";
 import { createJustBashSandbox } from "./src/sandbox-just-bash";
 import { createCloudSandbox } from "./src/sandbox-cloud";
-import { createReadTool, createGrepTool, createBashTool, createTaskTool } from "./src/tools";
+import { createReadTool, createGrepTool, createBashTool, createAskUserTool, createTaskTool } from "./src/tools";
 import { createApproval } from "./src/approval";
 import { addCacheControl, openaiCacheProviderOptions } from "./src/cache";
 import { parseChaosArgs, wrapWithChaos } from "./src/chaos";
@@ -108,6 +108,7 @@ async function main() {
     read: createReadTool(sandbox),
     grep: createGrepTool(sandbox),
     bash: createBashTool(sandbox, createApproval({ mode: "interactive" })),
+    askUser: createAskUserTool(),
   };
 
   const explorerModel = customOpenAI(

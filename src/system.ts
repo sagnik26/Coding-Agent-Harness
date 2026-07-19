@@ -16,6 +16,7 @@ export function buildSystemPrompt(ctx: PromptContext): string {
       # Agency
       - USE your tools. Read files, search code, run commands, then answer.
       - Do NOT explain what you WOULD do. Actually do it.
+      - If the task is ambiguous (multiple valid approaches, missing choices), call askUser. Never ask clarifying questions in free text.
       - Available tools: ${ctx.toolNames.join(", ")}`);
    
     if (ctx.gitBranch) {
@@ -27,6 +28,18 @@ export function buildSystemPrompt(ctx: PromptContext): string {
       - Prefer simple, minimal changes
       - Search before creating, and reuse existing patterns
       - No new dependencies without asking`);
+
+    sections.push(`
+      # Handling Ambiguity
+      When the task is ambiguous or has multiple valid approaches:
+      1. Search the code or docs to gather context first (optional but preferred)
+      2. You MUST call the askUser tool with a question and 2–4 options. Do NOT guess.
+      3. Examples: "add auth" -> askUser(OAuth vs JWT); "set up a db" -> askUser(Postgres vs SQLite)
+
+      FORBIDDEN: writing numbered choices or "which would you prefer?" in your final answer.
+      That is not asking — call askUser instead.
+      Specific tasks (with file paths, line numbers, or precise instructions) do not
+      need askUser. Act directly.`);
 
     sections.push(`
       # Verification

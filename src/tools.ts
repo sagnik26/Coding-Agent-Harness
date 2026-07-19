@@ -114,6 +114,31 @@ export function createBashTool(
   });
 }
 
+export function createAskUserTool() {
+  return tool({
+    description: `Ask the user a multiple-choice question via this tool (required for ambiguity).
+      WHEN TO USE: scoping ambiguous tasks (e.g. "add auth", "set up a db"), choosing between
+        approaches, resolving a missing detail before acting.
+      WHEN NOT TO USE: you already have enough context to proceed; specific file/line tasks.
+      DO NOT USE FOR: rhetorical questions or progress updates.
+      CRITICAL: If you would write "which option?" or a numbered list of choices in your reply,
+        call this tool instead. Free-text clarifying questions are not allowed.`,
+    inputSchema: z.object({
+      question: z.string().describe("The question to ask the user"),
+      options: z
+        .array(z.string())
+        .min(2)
+        .max(4)
+        .describe("Two to four options for the user to pick from"),
+    }),
+    execute: async ({ question, options }) => {
+      const formatted = options.map((o, i) => `${i + 1}. ${o}`).join("\n");
+      console.log(`\nQuestion: ${question}\n${formatted}\n`);
+      return `Asked: "${question}"\nOptions:\n${formatted}\n\n(Awaiting user response.)`;
+    },
+  });
+}
+
 const EXECUTOR_TRUST = ["npm test", "npm run build", "npx tsc", "pnpm typecheck"];
 
 function buildExplorer(

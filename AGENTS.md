@@ -110,8 +110,9 @@ See [Architecture.md](./Architecture.md#design-patterns) for full detail. Short 
 | `grep` | Search across files with regex (50-match cap) |
 | `bash` | Shell commands (approval-gated) |
 | `task` | Delegate to explorer (read-only, parallel descriptions) or executor (delegated bash) |
+| `askUser` | Multiple-choice question when the task is ambiguous (2–4 options) |
 
-**Routing:** Read a specific file → `read`. Search patterns → `grep`. Run commands → `bash`. Multi-file investigation → `task` (explorer). Independent multi-area research → one explorer `task` with several descriptions. Trusted implementation/verification → `task` with `subagentType: "executor"` and one description; parent synthesizes / decides.
+**Routing:** Read a specific file → `read`. Search patterns → `grep`. Run commands → `bash`. Multi-file investigation → `task` (explorer). Independent multi-area research → one explorer `task` with several descriptions. Trusted implementation/verification → `task` with `subagentType: "executor"` and one description; parent synthesizes / decides. Ambiguous requirements → search first, then `askUser` (do not guess).
 
 ### Sandbox
 
@@ -200,8 +201,9 @@ After making code changes:
 | Subagents: explorer via `task` tool | Done (6.2) |
 | Subagents: executor via `task` tool | Done (6.3) |
 | Subagents: task tool as router | Done (6.4) |
+| HITL: `askUser` + ambiguity protocol | Done (8.1) |
+| HITL: approval config vs events (concept) | Done (8.2) — events deferred to Module 11 |
 | Write / edit tools | Planned |
-| Subagents (`task` tool) | Planned |
 | Streaming CLI | Planned |
 | Skills system | Planned |
 
