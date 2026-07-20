@@ -56,6 +56,10 @@ export async function createCloudSandbox(
 
     readFile: async (p) => vm.fs.readFile(workspacePath(p), "utf8"),
 
+    writeFile: async (p, content) => {
+      await vm.fs.writeFile(workspacePath(p), content);
+    },
+
     exec: async (command, _options?: ExecOptions) => {
       const result = await vm.runCommand({
         cmd: "bash",

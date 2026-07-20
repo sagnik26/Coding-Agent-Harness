@@ -16,6 +16,9 @@ export async function createJustBashSandbox(dir: string): Promise<Sandbox> {
     type: "just-bash",
     workingDirectory: dir,
     readFile: async (p) => jb.readFile(toVirtualPath(p)),
+    writeFile: async (p, content) => {
+      await jb.writeFiles({ [toVirtualPath(p)]: content });
+    },
     exec: async (command, options?: ExecOptions) => {
       const cmd = await jb.runCommand({
         cmd: command,

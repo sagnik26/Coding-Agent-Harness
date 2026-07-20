@@ -3,6 +3,21 @@ const SAFE_PREFIXES = [
   "head", "tail", "wc", "git log", "git status", "git diff",
 ];
 
+const VERIFICATION_PREFIXES = [
+  "pnpm typecheck",
+  "pnpm run typecheck",
+  "pnpm test",
+  "pnpm run test",
+  "pnpm run lint",
+  "pnpm run build",
+  "npm test",
+  "npm run test",
+  "npm run lint",
+  "npm run build",
+  "npm run typecheck",
+  "npx tsc",
+];
+
 export type ApprovalConfig =
   | { mode: "interactive" }
   | { mode: "background" }
@@ -16,6 +31,9 @@ export function createApproval(config: ApprovalConfig) {
       return !config.trust.some((p) => command.trim().startsWith(p));
     }
 
-    return !SAFE_PREFIXES.some((p) => command.trim().startsWith(p));
+    return !(
+      SAFE_PREFIXES.some((p) => command.trim().startsWith(p)) ||
+      VERIFICATION_PREFIXES.some((p) => command.trim().startsWith(p))
+    );
   };
 }

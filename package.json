@@ -5,11 +5,12 @@
   "description": "",
   "main": "index.js",
   "scripts": {
+    "verify": "pnpm typecheck", 
     "start": "tsx index.ts",
     "typecheck": "tsc --noEmit",
-    "test": "...",
-    "build": "...",
-    "lint": "..."
+    "test": "echo 'no tests yet'",
+    "build": "tsc --noEmit",
+    "lint": "echo 'lint not configured'"
   },
   "keywords": [],
   "author": "",

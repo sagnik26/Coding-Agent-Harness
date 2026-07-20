@@ -9,8 +9,9 @@ import { buildSystemPrompt } from "./src/system";
 import { createLocalSandbox } from "./src/sandbox-local";
 import { createJustBashSandbox } from "./src/sandbox-just-bash";
 import { createCloudSandbox } from "./src/sandbox-cloud";
-import { createReadTool, createGrepTool, createBashTool, createAskUserTool, createTaskTool } from "./src/tools";
+import { createReadTool, createGrepTool, createWriteTool, createEditTool, createBashTool, createAskUserTool, createTodoTool, createTaskTool } from "./src/tools";
 import { createApproval } from "./src/approval";
+import { discoverGates } from "./src/verification";
 import { addCacheControl, openaiCacheProviderOptions } from "./src/cache";
 import { parseChaosArgs, wrapWithChaos } from "./src/chaos";
 
@@ -104,11 +105,16 @@ async function main() {
     ? readFileSync(agentsPath, "utf-8")
     : undefined;
 
+  const verificationCommands = await discoverGates(sandbox);
+
   const tools = {
     read: createReadTool(sandbox),
     grep: createGrepTool(sandbox),
+    write: createWriteTool(sandbox),
+    edit: createEditTool(sandbox),
     bash: createBashTool(sandbox, createApproval({ mode: "interactive" })),
     askUser: createAskUserTool(),
+    todo: createTodoTool(),
   };
 
   const explorerModel = customOpenAI(
@@ -134,9 +140,10 @@ async function main() {
       sandboxType: sandbox.type,
       toolNames: Object.keys(tools_with_task),
       projectContext,
+      verificationCommands,
     }),
     tools: tools_with_task,
-    stopWhen: stepCountIs(10),
+    stopWhen: stepCountIs(15),
     onStepFinish: ({ usage, stepNumber }) => {
       const cached = usage.inputTokenDetails?.cacheReadTokens ?? 0;
       console.error(

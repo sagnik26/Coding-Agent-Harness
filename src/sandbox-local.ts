@@ -1,5 +1,5 @@
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
 import { spawn } from "node:child_process";
 import type { ExecOptions, Sandbox } from "./sandbox";
 
@@ -50,6 +50,11 @@ export function createLocalSandbox(dir: string): Sandbox {
     type: "local",
     workingDirectory: dir,
     readFile: async (p) => readFileSync(resolve(dir, p), "utf-8"),
+    writeFile: async (p, content) => {
+      const abs = resolve(dir, p);
+      mkdirSync(dirname(abs), { recursive: true });
+      writeFileSync(abs, content, "utf-8");
+    },
     exec: (command, options) => execSpawn(dir, command, options),
     stop: async () => {},
   };

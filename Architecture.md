@@ -12,7 +12,7 @@ A TypeScript coding agent harness built on the [Vercel AI SDK](https://sdk.verce
 |-------|------|
 | **CLI** (`index.ts`) | `main()` — factory wiring, agent run, guaranteed sandbox shutdown |
 | **Agent loop** | `ToolLoopAgent` — model thinks, calls tools, repeats until done |
-| **Tools** (`src/tools.ts`) | `read`, `grep`, `bash`, `task`, `askUser` — what the model can do |
+| **Tools** (`src/tools.ts`) | `read`, `grep`, `bash`, `task`, `askUser`, `todo` — what the model can do |
 | **Sandbox** (`src/sandbox*.ts`) | Abstraction over filesystem + command execution |
 | **System prompt** (`src/system.ts`) | Instructions, guardrails, ambiguity protocol, optional `AGENTS.md` injection |
 
@@ -32,7 +32,8 @@ Coding-Agent-Harness/
     ├── sandbox-just-bash.ts # In-memory overlay
     ├── sandbox-cloud.ts  # Remote VM (@vercel/sandbox)
     ├── cache.ts          # addCacheControl() for stable message prefixes
-    ├── tools.ts          # Tool factories (read, grep, bash, task, askUser)
+    ├── tools.ts          # Tool factories (read, grep, bash, task, askUser, todo)
+    ├── verification.ts   # Gate discovery from package.json (typecheck, lint, test, build)
     └── system.ts         # buildSystemPrompt()
 ```
 
@@ -446,6 +447,7 @@ Thin **adapter** over `@vercel/sandbox`. Same `Sandbox` shape; methods make netw
 | `read` | `readFile` | Read a known file; numbered lines; 500-line cap |
 | `grep` | `exec` | Regex search via `grep -rn`; 50-match cap |
 | `bash` | `exec` | Run shell commands; approval gate; 5,000-char stdout cap (tail kept) |
+| `todo` | (in-memory) | Multi-step task list; single `in_progress` constraint |
 
 Tool **descriptions** are prompts for the model — they route behavior (e.g. read vs grep vs bash).
 
@@ -487,9 +489,9 @@ Modes: `interactive` | `background` | `delegated`
 Sections:
 
 1. **Role** — working directory, sandbox type
-2. **Agency** — use tools, don't just explain
+2. **Agency** — use tools, grep-first exploration, don't just explain
 3. **Guardrails** — minimal changes, search before creating
-4. **Verification** — run typecheck/tests when applicable; honest reporting
+4. **Verification** — discovered gates from `package.json`; scoped honest reporting
 5. **AGENTS.md** — optional project-specific instructions
 
 ---

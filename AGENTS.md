@@ -30,6 +30,14 @@ CHAOS_MODE=kill-mid-command pnpm start . "List files with ls"
 
 **Note:** Use `pnpm start . "prompt"` — not `pnpm start -- . "prompt"` (pnpm passes `--` into argv).
 
+**Testing:** Prefer `SANDBOX=local` for agent tests unless you are specifically exercising the just-bash overlay. The parent agent step limit is **15** (`stopWhen: stepCountIs(15)`).
+
+Module 9 wiring smoke test (expect citations from both `index.ts` and `src/system.ts`, including `buildSystemPrompt({ verificationCommands })`):
+
+```bash
+SANDBOX=local pnpm start . "How is Module 9 wired end-to-end? Grep createTodoTool, discoverGates, buildSystemPrompt. Read index.ts and src/system.ts at grep hit line ranges. Cite at least one specific line from each file, including buildSystemPrompt and # Planning (todo) or # Verification. No askUser."
+```
+
 ---
 
 ## Environment
@@ -72,6 +80,8 @@ Coding-Agent-Harness/
     └── system.ts         # buildSystemPrompt()
 ```
 
+CLI entry is **`index.ts` at the repo root** — not `src/index.ts`.
+
 ### Request flow (short)
 
 1. `main()` parses `cwd` + prompt from argv
@@ -108,11 +118,14 @@ See [Architecture.md](./Architecture.md#design-patterns) for full detail. Short 
 |------|---------|
 | `read` | Read a known file (numbered lines, 500-line cap) |
 | `grep` | Search across files with regex (50-match cap) |
+| `write` | Create or overwrite a file (full contents) |
+| `edit` | Targeted search/replace edit (preferred for partial changes) |
 | `bash` | Shell commands (approval-gated) |
 | `task` | Delegate to explorer (read-only, parallel descriptions) or executor (delegated bash) |
 | `askUser` | Multiple-choice question when the task is ambiguous (2–4 options) |
+| `todo` | Track multi-step work (add/start/complete/list; one in_progress at a time) |
 
-**Routing:** Read a specific file → `read`. Search patterns → `grep`. Run commands → `bash`. Multi-file investigation → `task` (explorer). Independent multi-area research → one explorer `task` with several descriptions. Trusted implementation/verification → `task` with `subagentType: "executor"` and one description; parent synthesizes / decides. Ambiguous requirements → search first, then `askUser` (do not guess).
+**Routing:** Read a specific file → `read`. Search patterns → `grep`. Partial file changes → `edit`. New files or full overwrite → `write`. Run commands → `bash`. Multi-step tasks (3+ steps, multiple files) → `todo` to plan and track. Multi-file investigation → `task` (explorer). Independent multi-area research → one explorer `task` with several descriptions. Trusted implementation/verification → `task` with `subagentType: "executor"` and one description; parent synthesizes / decides. Ambiguous requirements → search first, then `askUser` (do not guess).
 
 ### Sandbox
 
@@ -164,6 +177,7 @@ After making code changes:
 `bash` runs in **interactive** approval mode:
 
 - **Allowed** (safe prefixes): `ls`, `cat`, `echo`, `pwd`, `which`, `find`, `head`, `tail`, `wc`, `git log`, `git status`, `git diff`
+- **Allowed** (verification): `pnpm typecheck`, `pnpm run typecheck`, `pnpm test`, `pnpm run test`, `pnpm run lint`, `pnpm run build`, `npx tsc`, and npm equivalents
 - **Blocked** — returns a string message; report blocks honestly, do not fabricate success
 
 ---
@@ -171,6 +185,7 @@ After making code changes:
 ## Lessons learned
 
 - `grep` tool: use `path: "."` to search the whole project; `glob: "*.*"` or `glob: "*.ts"` for file filtering
+- `grep` on `just-bash`: uses paths relative to project root (e.g. `src`, `.`) — not host absolute paths — so matches work inside the virtual cwd
 - `read` tool: path is relative to working directory; output is numbered and capped at 500 lines
 - Live command output streams to **stderr** via `onStdout` — not an error channel, just a side channel for progress
 - `process.stderr.write(chunk)` in bash tool shows output while the command runs; full output is still returned to the model
@@ -186,7 +201,7 @@ After making code changes:
 | Module | Status |
 |--------|--------|
 | Agent loop (`ToolLoopAgent`) | Done |
-| Tools: `read`, `grep`, `bash` | Done |
+| Tools: `read`, `grep`, `write`, `edit`, `bash` | Done |
 | Sandbox: local | Done |
 | System prompt + AGENTS.md injection | Done |
 | Sandbox: just-bash | Done |
@@ -203,7 +218,8 @@ After making code changes:
 | Subagents: task tool as router | Done (6.4) |
 | HITL: `askUser` + ambiguity protocol | Done (8.1) |
 | HITL: approval config vs events (concept) | Done (8.2) — events deferred to Module 11 |
-| Write / edit tools | Planned |
+| Planning: `todo` tool + verification gates | Done (9) |
+| Write / edit tools | Done |
 | Streaming CLI | Planned |
 | Skills system | Planned |
 

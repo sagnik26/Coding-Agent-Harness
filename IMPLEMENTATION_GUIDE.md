@@ -1283,8 +1283,8 @@ Run the harness against a **real project** with a non-trivial task:
 
 ### Module 9
 
-- [ ] `todo` with single-active constraint
-- [ ] Verification gates in prompt
+- [x] `todo` with single-active constraint
+- [x] Verification gates in prompt
 
 
 
