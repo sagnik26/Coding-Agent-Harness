@@ -1,0 +1,11 @@
+id: TC-012
+category: delegation
+fixture: todo-notes
+prompt: "Use executor to add a one-line comment to src/math.ts explaining what double() does"
+tools_expected: [task]
+require_task: true
+task_subagent: executor
+min_f1: 0.5
+judge:
+  prompt: "Did the agent delegate to executor and report adding a comment explaining double()?"
+  threshold: 0.85

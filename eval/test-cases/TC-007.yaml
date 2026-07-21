@@ -1,0 +1,7 @@
+id: TC-007
+category: routing
+fixture: todo-notes
+prompt: "List all files in this directory"
+tools_expected: [bash]
+min_f1: 0.99
+judge: null

@@ -1,28 +1,26 @@
 {
-  "name": "Coding-Agent-Harness",
+  "name": "coding-agent-harness",
   "version": "1.0.0",
+  "private": true,
   "type": "module",
-  "description": "",
-  "main": "index.js",
+  "description": "TeensyCode-style coding agent harness (pnpm workspace root)",
   "scripts": {
-    "verify": "pnpm typecheck", 
-    "start": "tsx index.ts",
-    "typecheck": "tsc --noEmit",
+    "verify": "pnpm typecheck",
+    "start": "tsx apps/index.ts",
+    "typecheck": "pnpm -r --filter @coding-agent-harness/* typecheck",
     "test": "echo 'no tests yet'",
-    "build": "tsc --noEmit",
-    "lint": "echo 'lint not configured'"
+    "build": "pnpm typecheck",
+    "lint": "echo 'lint not configured'",
+    "eval": "pnpm --filter @coding-agent-harness/eval start",
+    "eval:smoke": "pnpm --filter @coding-agent-harness/eval eval:smoke",
+    "eval:dry": "pnpm --filter @coding-agent-harness/eval eval:dry"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "packageManager": "pnpm@10.22.0",
   "dependencies": {
-    "@ai-sdk/openai": "^4.0.8",
-    "@vercel/sandbox": "^2.5.0",
-    "ai": "^7.0.16",
-    "dotenv": "^17.4.2",
-    "just-bash": "^3.1.0",
-    "zod": "^4.4.3"
+    "@coding-agent-harness/cli": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^26.1.0",

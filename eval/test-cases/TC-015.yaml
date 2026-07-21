@@ -1,0 +1,10 @@
+id: TC-015
+category: ambiguity_handling
+fixture: todo-notes
+prompt: "Add a null check at line 39 of src/auth.ts before the database query"
+tools_expected: [read, edit]
+tools_forbidden: [askUser]
+ask_user: false
+judge:
+  prompt: "Did the agent proceed with the specific edit without asking a clarifying question?"
+  threshold: 0.85

@@ -1,14 +1,5 @@
 {
-  "compilerOptions": {
-    "target": "ESNext",
-    "module": "ESNext",
-    "moduleResolution": "bundler",
-    "strict": true,
-    "esModuleInterop": true,
-    "skipLibCheck": true,
-    "outDir": "dist",
-    "types": ["node"]
-  },
-  "include": ["**/*.ts"],
-  "exclude": ["node_modules", "dist"]
+  "extends": "./tsconfig.base.json",
+  "files": [],
+  "exclude": ["node_modules", "dist", "eval", "packages", "apps"]
 }

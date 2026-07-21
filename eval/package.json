@@ -1,0 +1,28 @@
+{
+  "name": "@coding-agent-harness/eval",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Behavioral evaluation suite for Coding-Agent-Harness",
+  "scripts": {
+    "start": "tsx src/index.ts",
+    "typecheck": "tsc --noEmit",
+    "eval:smoke": "tsx src/index.ts",
+    "eval:dry": "tsx src/index.ts --dry-run"
+  },
+  "dependencies": {
+    "@ai-sdk/openai": "^4.0.8",
+    "@coding-agent-harness/core": "workspace:*",
+    "@coding-agent-harness/sandbox": "workspace:*",
+    "@coding-agent-harness/tools": "workspace:*",
+    "ai": "^7.0.16",
+    "dotenv": "^17.4.2",
+    "yaml": "^2.9.0",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "^26.1.0",
+    "tsx": "^4.23.0",
+    "typescript": "^6.0.3"
+  }
+}

@@ -41,7 +41,7 @@ A practical build guide for [Vercel Academy's Build Your Own AI Coding Agent Har
 | **Agent loop**    | `ToolLoopAgent` with `read`, `grep`, `write`, `edit`, `bash`, `task`, `askUser`, `todo` |
 | **Safety**        | Execute-level gates → configurable approval (`interactive`, `background`, `delegated`)  |
 | **Prompts**       | Structured system prompt + `AGENTS.md` injection                                        |
-| **Sandbox**       | One `Sandbox` interface; `local`, `just-bash`, and `cloud` backends (see `src/sandbox-cloud.ts`) |
+| **Sandbox**       | One `Sandbox` interface; `local` and `cloud` backends (see `src/sandbox-cloud.ts`) |
 | **Context**       | `pruneMessages`, bounded tool output, cache control                                     |
 | **Subagents**     | Explorer (read-only, Haiku) and Executor (full tools, Sonnet) via `task` tool           |
 | **Extensibility** | Skills, custom tools, lifecycle events                                                  |
@@ -56,7 +56,7 @@ A practical build guide for [Vercel Academy's Build Your Own AI Coding Agent Har
 | ---------------------------------------------------- | ------------------------------------------------------------------ |
 | [AI SDK v6](https://sdk.vercel.ai)                   | `ToolLoopAgent`, `tool()`, `stepCountIs`, `pruneMessages`          |
 | [AI Gateway](https://vercel.com/ai-gateway)          | Model routing via string IDs (e.g. `"anthropic/claude-haiku-4-5"`) |
-| [just-bash](https://www.npmjs.com/package/just-bash) | In-memory copy-on-write filesystem                                 |
+| [@vercel/sandbox](https://www.npmjs.com/package/@vercel/sandbox) | Remote cloud VM sandbox |
 | [Zod v3](https://zod.dev)                            | Tool input schemas (v4 breaks AI SDK v6 types)                     |
 | Node.js 20+ with pnpm                                | Runtime and package manager                                        |
 
@@ -78,7 +78,7 @@ Each step lists **outcome**, **files to create/edit**, **verify commands**, and 
 | [Architecture.md](./Architecture.md) | Design patterns, request flow, backend comparison, changelog |
 | [AGENTS.md](./AGENTS.md) | Agent-facing project instructions (injected into system prompt) |
 
-**Current implementation status** (Modules 1–4 core): agent loop, `read`/`grep`/`bash`, local + just-bash + cloud sandboxes, lifecycle hooks, CLI refactor (`main`, `runAgent`, `shutdownSandbox`). See [AGENTS.md § Implementation status](./AGENTS.md#implementation-status).
+**Current implementation status** (Modules 1–4 core): agent loop, `read`/`grep`/`bash`, local + cloud sandboxes, lifecycle hooks, CLI refactor (`main`, `runAgent`, `shutdownSandbox`). See [AGENTS.md § Implementation status](./AGENTS.md#implementation-status).
 
 ---
 
@@ -176,29 +176,25 @@ pnpm typecheck
 
 ## Target Architecture
 
-Final layout after all modules:
+Final layout after all modules (pnpm workspace):
 
 ```
-teensycode/
-├── index.ts                 # CLI entry point (main, createSandbox, runAgent, shutdownSandbox)
-├── Architecture.md          # Living architecture doc
-├── package.json
-├── tsconfig.json
-├── AGENTS.md                # Optional per-project instructions
+Coding-Agent-Harness/
+├── apps/index.ts            # Thin entry — calls main from packages/cli
+├── Architecture.md
+├── package.json             # workspace root (scripts only)
+├── pnpm-workspace.yaml
+├── tsconfig.base.json
+├── AGENTS.md
+├── packages/
+│   ├── core/src/            # sandbox interface, approval, system, verification, cache
+│   ├── sandbox/src/         # local / cloud, chaos, lifecycle
+│   ├── tools/src/           # tool factories (+ planned skills)
+│   └── cli/src/             # main, createSandbox, runAgent, shutdownSandbox
 ├── skills/                  # Optional skill definitions
 │   └── auth-patterns/
 │       └── SKILL.md
-└── src/
-    ├── sandbox.ts           # Sandbox interface + lifecycle hooks
-    ├── sandbox-local.ts     # Node fs + spawn
-    ├── sandbox-just-bash.ts # In-memory overlay
-    ├── sandbox-cloud.ts     # @vercel/sandbox adapter
-    ├── approval.ts          # ApprovalConfig discriminated union (planned extract)
-    ├── system.ts            # buildSystemPrompt()
-    ├── tools.ts             # All tool factories
-    ├── skills.ts            # Skill discovery
-    ├── verification.ts      # Gate discovery (typecheck, lint, test)
-    └── cache.ts             # Cache control headers
+└── eval/                    # behavioral eval suite
 ```
 
 ---
@@ -605,62 +601,21 @@ const tools = {
 
 
 
-### Lesson 4.3 — In-memory implementation (just-bash)
-
-```bash
-pnpm add just-bash
-```
-
-**Create** `src/sandbox-just-bash.ts`**:**
-
-```ts
-const MOUNT = "/home/user/project";  // CRITICAL: not the overlay root path
-
-export async function createJustBashSandbox(dir: string): Promise<Sandbox> {
-  const jb = await JustBashSandbox.create({ overlayRoot: dir });
-  return {
-    type: "just-bash",
-    readFile: async (p) => jb.readFile(`${MOUNT}/${p}`),
-    exec: async (command) => {
-      const cmd = await jb.runCommand(command, { cwd: MOUNT });
-      const finished = await cmd.wait();
-      return { stdout: await cmd.output(), exitCode: finished.exitCode };
-    },
-    stop: async () => {},
-  };
-}
-```
-
-**Switch backend:**
-
-```ts
-// Or use CLI flag: pnpm start -- --sandbox=just-bash . "..."
-const sandbox = process.env.SANDBOX === "just-bash"
-  ? await createJustBashSandbox(cwd)
-  : createLocalSandbox(cwd);
-```
-
-**Verify:** Write task on `just-bash` does not touch real disk.
-
----
-
-
-
 ### Lesson 4.4 — Cloud implementation (concept)
 
 [Vercel Sandbox](https://vercel.com/academy/vercel-sandbox) provides remote VMs with real filesystems, git, npm. Tradeoffs:
 
 
-|             | Local | just-bash      | Cloud              |
-| ----------- | ----- | -------------- | ------------------ |
-| Safety      | Low   | High (CoW)     | High (isolated VM) |
-| Cost        | Free  | Free           | Per-minute         |
-| Latency     | None  | Low            | Network round-trip |
-| Persistence | Yes   | No (in-memory) | Until timeout      |
+|             | Local | Cloud              |
+| ----------- | ----- | ------------------ |
+| Safety      | Low   | High (isolated VM) |
+| Cost        | Free  | Per-minute         |
+| Latency     | None  | Network round-trip |
+| Persistence | Yes   | Until timeout      |
 
 **Implemented in this repo** (`src/sandbox-cloud.ts`):
 
-- Thin **adapter** over `@vercel/sandbox` — same `Sandbox` interface as local/just-bash
+- Thin **adapter** over `@vercel/sandbox` — same `Sandbox` interface as local
 - `readFile` → `vm.fs.readFile` at `/vercel/sandbox`
 - `exec` → `vm.runCommand({ cmd: "bash", args: ["-c", command] })`
 - `stop`, `snapshot`, `expiresAt` forwarded from the VM
@@ -708,7 +663,7 @@ async function shutdownSandbox(sandbox, hooks) {
 
 `createCloudSandbox` calls `hooks.afterStart` after the VM is ready. `main()` always calls `shutdownSandbox` in `finally` so cloud VMs are not left running.
 
-**Commit:** `feat(sandbox): local, just-bash, and cloud backends behind Sandbox interface`
+**Commit:** `feat(sandbox): local and cloud backends behind Sandbox interface`
 
 ---
 
@@ -1090,7 +1045,7 @@ try {
 **Run:**
 
 ```bash
-pnpm start -- --sandbox=just-bash --model=anthropic/claude-haiku-4-5 . "Read package.json"
+pnpm start -- --sandbox=cloud --model=anthropic/claude-haiku-4-5 . "Read package.json"
 ```
 
 ---
@@ -1251,7 +1206,7 @@ Run the harness against a **real project** with a non-trivial task:
 ### Module 4
 
 - [x] `Sandbox` interface; tools use it exclusively
-- [x] Local, just-bash, and cloud backends swap via `SANDBOX` env
+- [x] Local and cloud backends swap via `SANDBOX` env
 - [x] `sandbox.stop()` on exit (`shutdownSandbox` in `finally`)
 - [x] Lifecycle hooks (`afterStart`, `beforeStop`) for cloud
 - [x] Chaos mode (`--chaos`) — one injected failure per session

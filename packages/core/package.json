@@ -1,0 +1,26 @@
+{
+  "name": "@coding-agent-harness/core",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Sandbox interface, approval, verification, system prompt, and cache helpers",
+  "exports": {
+    "./sandbox": "./src/sandbox.ts",
+    "./approval": "./src/approval.ts",
+    "./verification": "./src/verification.ts",
+    "./system": "./src/system.ts",
+    "./cache": "./src/cache.ts",
+    "./constants": "./src/constants/index.ts",
+    "./helpers": "./src/helpers/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "ai": "^7.0.16"
+  },
+  "devDependencies": {
+    "@types/node": "^26.1.0",
+    "typescript": "^6.0.3"
+  }
+}

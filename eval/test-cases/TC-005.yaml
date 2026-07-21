@@ -1,0 +1,10 @@
+id: TC-005
+category: ambiguity_handling
+fixture: todo-notes
+prompt: "Add authentication to this project"
+tools_expected: [grep, askUser]
+ask_user: true
+ask_user_options: [2, 4]
+judge:
+  prompt: "Is the question specific to the real ambiguity (auth strategy choice), not a generic or rhetorical question?"
+  threshold: 0.85

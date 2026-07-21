@@ -13,10 +13,11 @@ For deeper design detail, see [Architecture.md](./Architecture.md).
 | Command | Purpose |
 |---------|---------|
 | `pnpm start . "<prompt>"` | Run the agent against this project (local sandbox) |
-| `SANDBOX=just-bash pnpm start . "<prompt>"` | Run agent with in-memory sandbox (writes don't touch disk) |
 | `SANDBOX=cloud pnpm start . "<prompt>"` | Run agent on a remote Vercel Sandbox VM |
 | `CHAOS=1 pnpm start . "<prompt>"` | Inject one random sandbox failure this session |
-| `pnpm typecheck` | TypeScript check (`tsc --noEmit`) |
+| `pnpm typecheck` | TypeScript check (all `@coding-agent-harness/*` packages) |
+| `pnpm eval` | Run behavioral eval suite (all cases) |
+| `pnpm eval:dry` | List eval cases without calling the model |
 
 **Examples:**
 
@@ -30,12 +31,12 @@ CHAOS_MODE=kill-mid-command pnpm start . "List files with ls"
 
 **Note:** Use `pnpm start . "prompt"` — not `pnpm start -- . "prompt"` (pnpm passes `--` into argv).
 
-**Testing:** Prefer `SANDBOX=local` for agent tests unless you are specifically exercising the just-bash overlay. The parent agent step limit is **15** (`stopWhen: stepCountIs(15)`).
+**Testing:** Prefer `SANDBOX=local` for agent tests. The parent agent step limit is **15** (`stopWhen: stepCountIs(15)`).
 
-Module 9 wiring smoke test (expect citations from both `index.ts` and `src/system.ts`, including `buildSystemPrompt({ verificationCommands })`):
+Module 9 wiring smoke test (expect citations from both `packages/cli/src/index.ts` and `packages/core/src/system.ts`, including `buildSystemPrompt({ verificationCommands })`):
 
 ```bash
-SANDBOX=local pnpm start . "How is Module 9 wired end-to-end? Grep createTodoTool, discoverGates, buildSystemPrompt. Read index.ts and src/system.ts at grep hit line ranges. Cite at least one specific line from each file, including buildSystemPrompt and # Planning (todo) or # Verification. No askUser."
+SANDBOX=local pnpm start . "How is Module 9 wired end-to-end? Grep createTodoTool, discoverGates, buildSystemPrompt. Read packages/cli/src/index.ts and packages/core/src/system.ts at grep hit line ranges. Cite at least one specific line from each file, including buildSystemPrompt and # Planning (todo) or # Verification. No askUser."
 ```
 
 ---
@@ -47,7 +48,7 @@ Create `.env` in the project root (do not commit):
 ```
 OPENAI_API_KEY=your-key-here
 OPENAI_MODEL=gpt-4o-mini   # optional
-SANDBOX=local              # local | just-bash | cloud
+SANDBOX=local              # local | cloud
 VERCEL_SNAPSHOT_ID=       # optional: restore cloud sandbox from snapshot
 
 # Cloud sandbox auth (one of):
@@ -59,46 +60,48 @@ VERCEL_SNAPSHOT_ID=       # optional: restore cloud sandbox from snapshot
 
 ## Architecture
 
-Single-package TypeScript agent harness (not a monorepo).
+pnpm workspace: packages `@coding-agent-harness/{core,sandbox,tools,cli}`, thin entry `apps/index.ts`, eval `@coding-agent-harness/eval`.
 
 ```
 Coding-Agent-Harness/
-├── index.ts              # CLI entry — wires sandbox, tools, agent
 ├── Architecture.md       # Living architecture doc
 ├── IMPLEMENTATION_GUIDE.md # Step-by-step build guide
 ├── AGENTS.md             # This file
-└── src/
-    ├── sandbox.ts        # Sandbox interface
-    ├── sandbox-local.ts  # Local disk + spawn-based exec
-    ├── sandbox-just-bash.ts # In-memory overlay (just-bash)
-    ├── sandbox-cloud.ts  # Remote VM (@vercel/sandbox)
-    ├── chaos.ts          # --chaos failure injection
-    ├── lifecycle-cloud.ts # Cloud afterStart / beforeStop / onTimeout
-    ├── approval.ts       # createApproval (interactive / delegated / background)
-    ├── cache.ts          # addCacheControl() for cacheable message prefixes
-    ├── tools.ts          # read, grep, bash, task tool factories
-    └── system.ts         # buildSystemPrompt()
+├── pnpm-workspace.yaml
+├── tsconfig.base.json
+├── apps/
+│   └── index.ts          # Thin entry — imports main from @coding-agent-harness/cli
+├── packages/
+│   ├── core/             # sandbox interface, approval, verification, system, cache
+│   │                     # (+ constants/, helpers/)
+│   ├── sandbox/          # local / cloud backends, chaos, lifecycle
+│   │                     # (+ constants/, helpers/)
+│   ├── tools/            # read, grep, write, edit, bash, task, askUser, todo
+│   │                     # (+ constants/, helpers/)
+│   └── cli/              # @coding-agent-harness/cli — main(), sandbox factory, agent wiring
+│                         # (+ constants/, helpers/)
+└── eval/                 # @coding-agent-harness/eval — behavioral eval suite
 ```
 
-CLI entry is **`index.ts` at the repo root** — not `src/index.ts`.
+CLI entry is **`apps/index.ts`** (calls `main` from `packages/cli`). Eval runs via `pnpm eval` (workspace filter). Libraries are imported as `@coding-agent-harness/core/*`, `@coding-agent-harness/sandbox/*`, `@coding-agent-harness/tools/tools`.
 
 ### Request flow (short)
 
 1. `main()` parses `cwd` + prompt from argv
-2. `createSandbox()` picks backend (`local` / `just-bash` / `cloud`)
+2. `createSandbox()` picks backend (`local` / `cloud`)
 3. Tools are built with the sandbox injected (`createReadTool(sandbox)`, etc.)
 4. `ToolLoopAgent` sends prompt + tool definitions to the model
 5. Model calls tools (`read`, `grep`, `bash`) as needed
 6. `runAgent()` → `printAgentResult()` logs tool trace + answer
 7. `shutdownSandbox()` in `finally` — always stops sandbox (critical for cloud billing)
 
-### CLI functions (`index.ts`)
+### CLI functions (`packages/cli/src/index.ts`)
 
 | Function | Role |
 |----------|------|
 | `main()` | Wire everything; `try/finally` for cleanup |
 | `createSandbox()` | Factory — `SANDBOX` env → backend |
-| `createApproval()` | Bash command gating (`src/approval.ts` — interactive / delegated) |
+| `createApproval()` | Bash command gating (`packages/core/src/approval.ts` — interactive / delegated) |
 | `runAgent()` | `agent.generate({ prompt })` |
 | `printAgentResult()` | Tool trace + answer + step count |
 | `shutdownSandbox()` | `beforeStop` hook + `sandbox.stop()` |
@@ -107,7 +110,7 @@ CLI entry is **`index.ts` at the repo root** — not `src/index.ts`.
 
 See [Architecture.md](./Architecture.md#design-patterns) for full detail. Short version:
 
-- **Strategy** — `Sandbox` interface; swap local / just-bash / cloud
+- **Strategy** — `Sandbox` interface; swap local / cloud
 - **Factory** — `createSandbox`, `createReadTool`, `createApproval`
 - **Adapter** — `sandbox-cloud.ts` wraps `@vercel/sandbox`
 - **Dependency injection** — tools receive `sandbox`, not concrete backends
@@ -132,7 +135,6 @@ See [Architecture.md](./Architecture.md#design-patterns) for full detail. Short 
 | Backend | Env | Behavior |
 |---------|-----|----------|
 | **local** | default | Real filesystem + `spawn` |
-| **just-bash** | `SANDBOX=just-bash` | Copy-on-write overlay — reads from disk, writes in memory |
 | **cloud** | `SANDBOX=cloud` | Remote Vercel Sandbox VM — isolated, per-minute cost, hard timeout |
 
 Lifecycle hooks (`afterStart`, `beforeStop`, `onTimeout`) apply to cloud:
@@ -143,9 +145,9 @@ Lifecycle hooks (`afterStart`, `beforeStop`, `onTimeout`) apply to cloud:
 | `beforeStop` | `shutdownSandbox()` in `finally` | Cleanup before VM stops |
 | `onTimeout` | Planned (Module 7) | Snapshot before timeout |
 
-- `readFile` — path translation per backend (`cwd`, `/home/user/project`, `/vercel/sandbox`)
-- `exec` — local: `spawn`; just-bash: virtual shell; cloud: `vm.runCommand`
-- Chaos: `CHAOS=1 pnpm start . "<prompt>"` — one random failure (`src/chaos.ts`)
+- `readFile` — path translation per backend (`cwd`, `/vercel/sandbox`)
+- `exec` — local: `spawn`; cloud: `vm.runCommand`
+- Chaos: `CHAOS=1 pnpm start . "<prompt>"` — one random failure (`packages/sandbox/src/chaos.ts`)
 
 ---
 
@@ -154,7 +156,7 @@ Lifecycle hooks (`afterStart`, `beforeStop`, `onTimeout`) apply to cloud:
 - **ESM** — `"type": "module"` in `package.json`
 - **Named exports** — no default exports
 - **Tool factories** — take a `Sandbox` interface, not concrete implementations (dependency injection)
-- **Sandbox factory** — `createSandbox()` in `index.ts`; never import backends in `tools.ts`
+- **Sandbox factory** — `createSandbox()` in `packages/cli/src/index.ts`; never import backends in `tools.ts`
 - **AI SDK v6 naming** — `instructions` (not `system`), `stopWhen: stepCountIs(n)`, `agent.generate({ prompt })`
 - **Minimal diffs** — only change what the task requires; match existing patterns
 - **No new dependencies** without asking
@@ -185,13 +187,12 @@ After making code changes:
 ## Lessons learned
 
 - `grep` tool: use `path: "."` to search the whole project; `glob: "*.*"` or `glob: "*.ts"` for file filtering
-- `grep` on `just-bash`: uses paths relative to project root (e.g. `src`, `.`) — not host absolute paths — so matches work inside the virtual cwd
 - `read` tool: path is relative to working directory; output is numbered and capped at 500 lines
 - Live command output streams to **stderr** via `onStdout` — not an error channel, just a side channel for progress
 - `process.stderr.write(chunk)` in bash tool shows output while the command runs; full output is still returned to the model
 - `spawn` + Promise (local backend) instead of `execSync` — non-blocking exec and streaming
 - `interactive` approval does **not** prompt the user — it auto-allows safe-prefix commands and **blocks** the rest with a string message
-- `echo > file` is allowed (starts with `echo`) — use `SANDBOX=just-bash` for safe write exploration
+- `echo > file` is allowed (starts with `echo`) — prefer careful use on local; cloud is isolated
 - Cloud VM starts **empty** — seed files in `afterStart`, not in `createCloudSandbox`
 
 ---
@@ -204,7 +205,6 @@ After making code changes:
 | Tools: `read`, `grep`, `write`, `edit`, `bash` | Done |
 | Sandbox: local | Done |
 | System prompt + AGENTS.md injection | Done |
-| Sandbox: just-bash | Done |
 | Sandbox: cloud | Done |
 | CLI refactor (`main`, `runAgent`, `shutdownSandbox`) | Done |
 | Lifecycle hooks (cloud `afterStart` / `beforeStop`) | Done |

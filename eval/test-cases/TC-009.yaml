@@ -1,0 +1,8 @@
+id: TC-009
+category: planning
+fixture: legacy-math
+prompt: "What does the cwd parameter in src/util.ts do?"
+tools_expected: [read]
+tools_forbidden: [todo]
+todo: false
+judge: null

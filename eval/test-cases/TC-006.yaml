@@ -1,0 +1,8 @@
+id: TC-006
+category: routing
+fixture: todo-notes
+prompt: "Read the tsconfig.json"
+tools_expected: [read]
+tools_forbidden: [grep, bash]
+min_f1: 0.99
+judge: null

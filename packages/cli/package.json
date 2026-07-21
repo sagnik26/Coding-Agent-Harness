@@ -1,0 +1,27 @@
+{
+  "name": "@coding-agent-harness/cli",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "CLI wiring for the coding agent harness (main, sandbox factory, agent run)",
+  "exports": {
+    ".": "./src/index.ts",
+    "./constants": "./src/constants/index.ts",
+    "./helpers": "./src/helpers/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@ai-sdk/openai": "^4.0.8",
+    "@coding-agent-harness/core": "workspace:*",
+    "@coding-agent-harness/sandbox": "workspace:*",
+    "@coding-agent-harness/tools": "workspace:*",
+    "ai": "^7.0.16",
+    "dotenv": "^17.4.2"
+  },
+  "devDependencies": {
+    "@types/node": "^26.1.0",
+    "typescript": "^6.0.3"
+  }
+}

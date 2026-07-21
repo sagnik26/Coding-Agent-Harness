@@ -3,3 +3,5 @@ node_modules
 .env.local
 .vercel
 !.env.example
+eval/results/
+.pnpm-store

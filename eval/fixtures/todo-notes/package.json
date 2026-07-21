@@ -1,0 +1,10 @@
+{
+  "name": "todo-notes",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "echo ok",
+    "build": "echo build"
+  }
+}

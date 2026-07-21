@@ -1,0 +1,11 @@
+id: TC-011
+category: delegation
+fixture: widget-server
+prompt: "Use an explorer to find all route handlers and summarize them"
+tools_expected: [task]
+require_task: true
+task_subagent: explorer
+min_f1: 0.5
+judge:
+  prompt: "Does the summary concisely describe route handlers found in the project without inventing files?"
+  threshold: 0.85

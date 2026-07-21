@@ -1,0 +1,9 @@
+id: TC-003
+category: context_management
+fixture: widget-server
+prompt: "Read package.json, then tsconfig.json, then index.ts, then summarize everything"
+tools_expected: [read]
+min_f1: 0.9
+judge:
+  prompt: "Does the summary correctly describe the contents of all three files (package.json, tsconfig.json, index.ts)?"
+  threshold: 0.85

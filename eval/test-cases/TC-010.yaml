@@ -1,0 +1,11 @@
+id: TC-010
+category: routing
+fixture: widget-server
+prompt: "Find every place this project parses query strings and tell me which might fail on malformed input"
+tools_expected: [grep, read]
+first_tool: grep
+grep_before_read: true
+min_f1: 0.5
+judge:
+  prompt: "Does the answer identify parseQuery (or equivalent) and mention plausible failure modes on malformed input?"
+  threshold: 0.85

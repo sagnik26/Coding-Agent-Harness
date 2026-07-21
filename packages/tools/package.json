@@ -1,0 +1,24 @@
+{
+  "name": "@coding-agent-harness/tools",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Agent tool factories (read, grep, write, edit, bash, task, askUser, todo)",
+  "exports": {
+    "./tools": "./src/tools.ts",
+    "./constants": "./src/constants/index.ts",
+    "./helpers": "./src/helpers/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@coding-agent-harness/core": "workspace:*",
+    "ai": "^7.0.16",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "^26.1.0",
+    "typescript": "^6.0.3"
+  }
+}

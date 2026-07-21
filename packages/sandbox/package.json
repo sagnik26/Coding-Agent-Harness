@@ -1,0 +1,26 @@
+{
+  "name": "@coding-agent-harness/sandbox",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Sandbox backends (local, cloud), chaos, and cloud lifecycle",
+  "exports": {
+    "./sandbox-local": "./src/sandbox-local.ts",
+    "./sandbox-cloud": "./src/sandbox-cloud.ts",
+    "./chaos": "./src/chaos.ts",
+    "./lifecycle-cloud": "./src/lifecycle-cloud.ts",
+    "./constants": "./src/constants/index.ts",
+    "./helpers": "./src/helpers/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@coding-agent-harness/core": "workspace:*",
+    "@vercel/sandbox": "^2.5.0"
+  },
+  "devDependencies": {
+    "@types/node": "^26.1.0",
+    "typescript": "^6.0.3"
+  }
+}

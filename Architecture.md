@@ -10,32 +10,36 @@ A TypeScript coding agent harness built on the [Vercel AI SDK](https://sdk.verce
 
 | Layer | Role |
 |-------|------|
-| **CLI** (`index.ts`) | `main()` — factory wiring, agent run, guaranteed sandbox shutdown |
+| **CLI** (`apps/index.ts` → `packages/cli`) | Thin entry calls `main()` — factory wiring, agent run, guaranteed sandbox shutdown |
 | **Agent loop** | `ToolLoopAgent` — model thinks, calls tools, repeats until done |
-| **Tools** (`src/tools.ts`) | `read`, `grep`, `bash`, `task`, `askUser`, `todo` — what the model can do |
-| **Sandbox** (`src/sandbox*.ts`) | Abstraction over filesystem + command execution |
-| **System prompt** (`src/system.ts`) | Instructions, guardrails, ambiguity protocol, optional `AGENTS.md` injection |
+| **Tools** (`packages/tools`) | `read`, `grep`, `bash`, `task`, `askUser`, `todo` — what the model can do |
+| **Sandbox** (`packages/sandbox`) | Abstraction over filesystem + command execution |
+| **Core** (`packages/core`) | Sandbox interface, approval, verification, system prompt, cache |
 
 ---
 
 ## Project structure
 
+pnpm workspace (`pnpm-workspace.yaml`): `@coding-agent-harness/{core,sandbox,tools,cli}`, thin entry `apps/index.ts`, eval `@coding-agent-harness/eval`.
+
 ```
 Coding-Agent-Harness/
-├── index.ts              # CLI entry point
 ├── Architecture.md       # This file
 ├── IMPLEMENTATION_GUIDE.md
 ├── AGENTS.md             # Optional per-project instructions (if present)
-└── src/
-    ├── sandbox.ts        # Sandbox interface
-    ├── sandbox-local.ts  # Local disk + spawn-based exec
-    ├── sandbox-just-bash.ts # In-memory overlay
-    ├── sandbox-cloud.ts  # Remote VM (@vercel/sandbox)
-    ├── cache.ts          # addCacheControl() for stable message prefixes
-    ├── tools.ts          # Tool factories (read, grep, bash, task, askUser, todo)
-    ├── verification.ts   # Gate discovery from package.json (typecheck, lint, test, build)
-    └── system.ts         # buildSystemPrompt()
+├── pnpm-workspace.yaml
+├── tsconfig.base.json
+├── apps/
+│   └── index.ts          # Thin entry — import { main } from @coding-agent-harness/cli
+├── packages/
+│   ├── core/             # sandbox interface, approval, verification, system, cache
+│   ├── sandbox/          # local / cloud, chaos, lifecycle
+│   ├── tools/            # tool factories
+│   └── cli/              # main(), createSandbox, agent wiring
+└── eval/                 # @coding-agent-harness/eval — behavioral eval suite
 ```
+
+Packages export source via `package.json` `exports` (e.g. `@coding-agent-harness/cli`, `@coding-agent-harness/tools/tools`, `@coding-agent-harness/core/cache`).
 
 **Planned** (see `IMPLEMENTATION_GUIDE.md`): write/edit tools, skills, streaming CLI, Module 11 event-based approval.
 
@@ -45,18 +49,18 @@ Coding-Agent-Harness/
 
 | Pattern | Where | What it does |
 |---------|-------|--------------|
-| **Strategy** | `Sandbox` interface + three backends | Same `readFile` / `exec` API; swap local, just-bash, or cloud via `SANDBOX` |
+| **Strategy** | `Sandbox` interface + local/cloud backends | Same `readFile` / `exec` API; swap local or cloud via `SANDBOX` |
 | **Factory** | `createSandbox`, `createReadTool`, `createApproval`, etc. | Centralized construction; callers don't build concrete implementations |
 | **Adapter** | `sandbox-cloud.ts` | Wraps `@vercel/sandbox` VM API behind your `Sandbox` interface |
 | **Dependency injection** | `createReadTool(sandbox)`, `createBashTool(sandbox, needsApproval)` | Tools receive dependencies; they don't pick a backend |
 | **Lifecycle hooks** | `SandboxLifecycleHooks` | `afterStart` / `beforeStop` / `onTimeout` — cloud setup and teardown |
 | **Discriminated union** | `ApprovalConfig` | Type-safe approval modes: `interactive` \| `background` \| `delegated` |
 
-**Approval layers (Module 8.2):** The **config** layer (`src/approval.ts`) answers *who decides* for a session. A future **event** layer (Module 11) answers *what policies apply* — e.g. block writes to `.env` regardless of mode. They combine for defense in depth; events are not implemented yet.
+**Approval layers (Module 8.2):** The **config** layer (`packages/core/src/approval.ts`) answers *who decides* for a session. A future **event** layer (Module 11) answers *what policies apply* — e.g. block writes to `.env` regardless of mode. They combine for defense in depth; events are not implemented yet.
 
 ```
 Factory (createSandbox)
-    → Strategy (local | just-bash | cloud)
+    → Strategy (local | cloud)
         → Adapter (cloud only: VercelSandbox → Sandbox)
             → Tools (read, grep, bash, task, askUser) via DI
                 → ToolLoopAgent
@@ -64,7 +68,7 @@ Factory (createSandbox)
 
 ---
 
-## CLI structure (`index.ts`)
+## CLI structure (`packages/cli/src/index.ts`)
 
 | Function | Role |
 |----------|------|
@@ -113,11 +117,11 @@ await main();
                               │         readFile / exec / stop     │
                               └──────────────┬─────────────────────┘
                     ┌────────────────────────┼────────────────────────┐
-                    ▼                        ▼                        ▼
-             ┌────────────┐          ┌────────────┐          ┌────────────┐
-             │   local    │          │ just-bash  │          │   cloud    │
-             │ spawn + fs │          │ virtual FS │          │ remote VM  │
-             └────────────┘          └────────────┘          └────────────┘
+                    ▼                                                 ▼
+             ┌────────────┐                                  ┌────────────┐
+             │   local    │                                  │   cloud    │
+             │ spawn + fs │                                  │ remote VM  │
+             └────────────┘                                  └────────────┘
 ```
 
 ---
@@ -142,7 +146,7 @@ tsx index.ts . "Read the tsconfig.json"
 |------|------|--------|
 | Load env | `import "dotenv/config"` | `OPENAI_API_KEY`, `SANDBOX`, optional `OPENAI_MODEL` |
 | Resolve cwd | `process.argv[2] \|\| process.cwd()` | Working directory = `.` |
-| Create sandbox | `createSandbox(SANDBOX, cwd)` | Factory picks local / just-bash / cloud |
+| Create sandbox | `createSandbox(SANDBOX, cwd)` | Factory picks local / cloud |
 | Create tools | `createReadTool`, `createGrepTool`, `createBashTool`, `createAskUserTool`, `createTaskTool` | Inject `sandbox` + approval policy |
 | Build prompt | `buildSystemPrompt(...)` | Agency, guardrails, ambiguity protocol, tool list, `AGENTS.md` |
 | Create agent | `new ToolLoopAgent({ model, instructions, tools, stopWhen })` | Agent loop, max 10 steps |
@@ -354,7 +358,7 @@ Tools depend on `Sandbox`, not `fs` or `child_process` directly. Swapping backen
 
 ### Chaos mode (Module 7)
 
-`wrapWithChaos` (`src/chaos.ts`) injects one random failure per session when `CHAOS=1` (or `--chaos`) is set:
+`wrapWithChaos` (`packages/sandbox/src/chaos.ts`) injects one random failure per session when `CHAOS=1` (or `--chaos`) is set:
 
 | Mode | Failure |
 |------|---------|
@@ -365,15 +369,15 @@ Tools depend on `Sandbox`, not `fs` or `child_process` directly. Swapping backen
 
 ### Backend comparison
 
-| | local | just-bash | cloud |
-|--|-------|-----------|-------|
-| **Cost** | Free | Free | Per-minute |
-| **Latency** | Microseconds | Microseconds | Network round-trip per call |
-| **Isolation** | None | Partial (CoW overlay) | Full remote VM |
-| **Persistence** | Permanent | In-memory until stop | Until timeout / snapshot |
-| **`expiresAt`** | — | — | Yes |
-| **`snapshot`** | — | — | Yes |
-| **Env** | `SANDBOX=local` (default) | `SANDBOX=just-bash` | `SANDBOX=cloud` |
+| | local | cloud |
+|--|-------|-------|
+| **Cost** | Free | Per-minute |
+| **Latency** | Microseconds | Network round-trip per call |
+| **Isolation** | None | Full remote VM |
+| **Persistence** | Permanent | Until timeout / snapshot |
+| **`expiresAt`** | — | Yes |
+| **`snapshot`** | — | Yes |
+| **Env** | `SANDBOX=local` (default) | `SANDBOX=cloud` |
 
 ### Local backend (`sandbox-local.ts`)
 
@@ -397,18 +401,6 @@ Tools depend on `Sandbox`, not `fs` or `child_process` directly. Swapping backen
 | All output at end | Chunked streaming via `onStdout` |
 | Throws on failure | Returns `{ stdout, exitCode }` |
 | Tied to real shell | Fits sandbox interface |
-
-### just-bash backend (`sandbox-just-bash.ts`)
-
-| Method | Implementation |
-|--------|----------------|
-| `readFile` | `jb.readFile(\`/home/user/project/${path}\`)` |
-| `exec` | `jb.runCommand({ cmd, cwd: MOUNT, detached: true })` |
-| `stop` | `jb.stop()` |
-
-**Mount point:** `overlayRoot` mounts at `/home/user/project`, not at the real path.
-
-**Copy-on-write:** Reads from real disk; writes stay in memory and disappear when sandbox stops.
 
 ### Cloud backend (`sandbox-cloud.ts`)
 
@@ -440,7 +432,7 @@ Thin **adapter** over `@vercel/sandbox`. Same `Sandbox` shape; methods make netw
 
 ---
 
-## Tools (`src/tools.ts`)
+## Tools (`packages/tools/src/tools.ts`)
 
 | Tool | Sandbox API | Purpose |
 |------|-------------|---------|
@@ -484,7 +476,7 @@ Modes: `interactive` | `background` | `delegated`
 
 ---
 
-## System prompt (`src/system.ts`)
+## System prompt (`packages/core/src/system.ts`)
 
 Sections:
 
@@ -502,7 +494,7 @@ Sections:
 |----------|---------|
 | `OPENAI_API_KEY` | OpenAI API authentication |
 | `OPENAI_MODEL` | Optional model override (default: `gpt-4o-mini`) |
-| `SANDBOX` | `local` (default), `just-bash`, or `cloud` |
+| `SANDBOX` | `local` (default) or `cloud` |
 | `VERCEL_SNAPSHOT_ID` | Optional cloud snapshot restore |
 
 ---
@@ -519,6 +511,6 @@ Sections:
 | 2026-07-08 | Synced `AGENTS.md` and `IMPLEMENTATION_GUIDE.md` with cloud sandbox, CLI refactor, lifecycle hooks |
 | 2026-07-13 | Refactored `index.ts`: `main()`, `runAgent`, `shutdownSandbox`; design patterns docs |
 | 2026-07-13 | Simplified cloud sandbox adapter; lifecycle hooks for cloud |
+| 2026-07-21 | Removed just-bash sandbox backend |
 | 2026-07-13 | Added cloud sandbox backend (@vercel/sandbox) |
-| 2026-07-13 | Added just-bash in-memory sandbox backend |
 | 2026-07-12 | Initial doc: CLI flow, agent loop, sandbox, tools, example trace |

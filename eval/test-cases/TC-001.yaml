@@ -1,0 +1,8 @@
+id: TC-001
+category: routing
+fixture: todo-notes
+prompt: "Find all TODO comments in this project"
+tools_expected: [grep]
+tools_forbidden: [bash, write, edit]
+min_f1: 0.99
+judge: null
