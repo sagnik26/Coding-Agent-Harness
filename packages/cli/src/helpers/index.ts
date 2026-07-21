@@ -1,4 +1,5 @@
 export { createSandbox } from "./sandbox";
+export { parseCliArgs, type CliArgs } from "./cliArgs";
 export {
   printAgentResult,
   runAgent,

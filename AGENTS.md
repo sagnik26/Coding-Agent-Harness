@@ -13,7 +13,9 @@ For deeper design detail, see [Architecture.md](./Architecture.md).
 | Command | Purpose |
 |---------|---------|
 | `pnpm start . "<prompt>"` | Run the agent against this project (local sandbox) |
-| `SANDBOX=cloud pnpm start . "<prompt>"` | Run agent on a remote Vercel Sandbox VM |
+| `pnpm start --sandbox=cloud . "<prompt>"` | Run agent on a remote Vercel Sandbox VM |
+| `pnpm start --model=gpt-4o-mini . "<prompt>"` | Override the OpenAI model (default: `gpt-4o-mini`) |
+| `SANDBOX=cloud pnpm start . "<prompt>"` | Same as `--sandbox=cloud` (env fallback) |
 | `CHAOS=1 pnpm start . "<prompt>"` | Inject one random sandbox failure this session |
 | `pnpm typecheck` | TypeScript check (all `@coding-agent-harness/*` packages) |
 | `pnpm eval` | Run behavioral eval suite (all cases) |
@@ -23,15 +25,15 @@ For deeper design detail, see [Architecture.md](./Architecture.md).
 
 ```bash
 pnpm start . "Read the tsconfig.json"
-pnpm start . "Find all TODO comments in this project"
+pnpm start --sandbox=local --model=gpt-4o-mini . "Find all TODO comments in this project"
 pnpm start . "List all files in this directory"
 CHAOS=1 pnpm start . "List files with ls"
 CHAOS_MODE=kill-mid-command pnpm start . "List files with ls"
 ```
 
-**Note:** Use `pnpm start . "prompt"` — not `pnpm start -- . "prompt"` (pnpm passes `--` into argv).
+**Note:** Use `pnpm start . "prompt"` or `pnpm start --sandbox=local . "prompt"` — not `pnpm start -- . "prompt"` (pnpm passes `--` into argv).
 
-**Testing:** Prefer `SANDBOX=local` for agent tests. The parent agent step limit is **15** (`stopWhen: stepCountIs(15)`).
+**Testing:** Prefer `--sandbox=local` (or `SANDBOX=local`) for agent tests. The parent agent step limit is **15** (`stopWhen: stepCountIs(15)`).
 
 Module 9 wiring smoke test (expect citations from both `packages/cli/src/index.ts` and `packages/core/src/system.ts`, including `buildSystemPrompt({ verificationCommands })`):
 
@@ -87,8 +89,8 @@ CLI entry is **`apps/index.ts`** (calls `main` from `packages/cli`). Eval runs v
 
 ### Request flow (short)
 
-1. `main()` parses `cwd` + prompt from argv
-2. `createSandbox()` picks backend (`local` / `cloud`)
+1. `main()` parses `--sandbox`, `--model`, `cwd`, and prompt via `parseArgs`
+2. `createSandbox()` picks backend (`local` / `cloud`) from flag or `SANDBOX` env
 3. Tools are built with the sandbox injected (`createReadTool(sandbox)`, etc.)
 4. `ToolLoopAgent` sends prompt + tool definitions to the model
 5. Model calls tools (`read`, `grep`, `bash`) as needed
@@ -100,7 +102,7 @@ CLI entry is **`apps/index.ts`** (calls `main` from `packages/cli`). Eval runs v
 | Function | Role |
 |----------|------|
 | `main()` | Wire everything; `try/finally` for cleanup |
-| `createSandbox()` | Factory — `SANDBOX` env → backend |
+| `createSandbox()` | Factory — `--sandbox` flag / `SANDBOX` env → backend |
 | `createApproval()` | Bash command gating (`packages/core/src/approval.ts` — interactive / delegated) |
 | `runAgent()` | `agent.generate({ prompt })` |
 | `printAgentResult()` | Tool trace + answer + step count |
@@ -134,8 +136,8 @@ See [Architecture.md](./Architecture.md#design-patterns) for full detail. Short 
 
 | Backend | Env | Behavior |
 |---------|-----|----------|
-| **local** | default | Real filesystem + `spawn` |
-| **cloud** | `SANDBOX=cloud` | Remote Vercel Sandbox VM — isolated, per-minute cost, hard timeout |
+| **local** | default / `--sandbox=local` | Real filesystem + `spawn` |
+| **cloud** | `--sandbox=cloud` or `SANDBOX=cloud` | Remote Vercel Sandbox VM — isolated, per-minute cost, hard timeout |
 
 Lifecycle hooks (`afterStart`, `beforeStop`, `onTimeout`) apply to cloud:
 

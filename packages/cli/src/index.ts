@@ -18,13 +18,13 @@ import { createApproval } from "@coding-agent-harness/core/approval";
 import { discoverGates } from "@coding-agent-harness/core/verification";
 import { addCacheControl, openaiCacheProviderOptions } from "@coding-agent-harness/core/cache";
 import { parseChaosArgs, wrapWithChaos } from "@coding-agent-harness/sandbox/chaos";
+import { PARENT_STEP_LIMIT } from "./constants/index";
 import {
-  DEFAULT_MODEL,
-  PARENT_STEP_LIMIT,
-  DEFAULT_PROMPT,
-  DEFAULT_SANDBOX,
-} from "./constants/index";
-import { createSandbox, runAgent, shutdownSandbox } from "./helpers/index";
+  createSandbox,
+  parseCliArgs,
+  runAgent,
+  shutdownSandbox,
+} from "./helpers/index";
 
 const customOpenAI = createOpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -32,10 +32,8 @@ const customOpenAI = createOpenAI({
 
 /** CLI entry — wire sandbox, tools, agent; always shut down sandbox. */
 export async function main() {
+  const { cwd, prompt, sandbox: sandboxType, model: modelId } = parseCliArgs();
   const { chaos, mode } = parseChaosArgs(process.argv.slice(2));
-  const cwd = process.argv[2] || process.cwd();
-  const prompt = process.argv.slice(3).join(" ") || DEFAULT_PROMPT;
-  const sandboxType = process.env.SANDBOX || DEFAULT_SANDBOX;
 
   let { sandbox, hooks } = await createSandbox(sandboxType, cwd);
   if (chaos) {
@@ -51,6 +49,12 @@ export async function main() {
     const mins = Math.round((sandbox.expiresAt - Date.now()) / 60_000);
     console.error(`Cloud sandbox expires in ~${mins} minutes`);
   }
+
+  process.on("SIGINT", async () => {
+    console.error("\nShutting down...");
+    await shutdownSandbox(sandbox, hooks);
+    process.exit(0);
+  });
 
   const agentsPath = join(cwd, "AGENTS.md");
   const projectContext = existsSync(agentsPath)
@@ -70,10 +74,10 @@ export async function main() {
   };
 
   const explorerModel = customOpenAI(
-    process.env.OPENAI_EXPLORER_MODEL ?? process.env.OPENAI_MODEL ?? DEFAULT_MODEL,
+    process.env.OPENAI_EXPLORER_MODEL ?? modelId,
   );
   const executorModel = customOpenAI(
-    process.env.OPENAI_EXECUTOR_MODEL ?? process.env.OPENAI_MODEL ?? DEFAULT_MODEL,
+    process.env.OPENAI_EXECUTOR_MODEL ?? modelId,
   );
 
   const tools_with_task = {
@@ -86,7 +90,7 @@ export async function main() {
   };
 
   const agent = new ToolLoopAgent({
-    model: customOpenAI(process.env.OPENAI_MODEL ?? DEFAULT_MODEL),
+    model: customOpenAI(modelId),
     instructions: buildSystemPrompt({
       workingDirectory: cwd,
       sandboxType: sandbox.type,
