@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "description": "TeensyCode-style coding agent harness (pnpm workspace root)",
+  "description": "Craftly — TypeScript coding agent harness (pnpm workspace root)",
   "scripts": {
     "verify": "pnpm typecheck",
     "start": "tsx apps/index.ts",

@@ -6,6 +6,30 @@ By targeting the gap between raw audio recording and full Web Audio engines, thi
 
 ---
 
+## Built with Craftly
+
+This module is a **target product** we will implement using the **Craftly** coding-agent harness in this repo (`Coding-Agent-Harness`).
+
+Craftly’s role:
+
+- Drive the multi-step implementation (specs → native capture → C++ DSP → RN UI → demo app)
+- Use sandboxed `read` / `edit` / `write` / `bash` against the library workspace
+- Delegate research (Nitro docs, platform APIs) via explorer `task`s and trusted implementation slices via executor `task`s
+- Run verification gates (`typecheck`, tests, native builds) as they appear in the package
+
+Treat this document as the product brief and execution blueprint the agent (and humans) follow while building the library with Craftly—not as a standalone roadmap for a different codebase.
+
+Suggested workflow once scaffolding exists:
+
+```bash
+# From the Craftly harness root — point the agent at the nitro-audio-dsp workspace
+pnpm start /path/to/react-native-nitro-audio-dsp "Implement Phase 1: Nitro DSPFrame + NitroAudioDSP contract in .nitro.ts"
+# or the Craftly web UI against the same working directory (AGENT_CWD)
+pnpm web
+```
+
+---
+
 ## Target Use Cases
 
 Capabilities that are currently impossible or sluggish with legacy React Native audio tools:
@@ -25,6 +49,8 @@ Audio tools such as guitar tuner apps, metronomes with microsecond accuracy, or 
 ---
 
 ## Execution Blueprint
+
+Phases below are the ordered work Craftly should plan with `todo` and execute against the library repo.
 
 ### Phase 1: Define the Specification Contract
 
@@ -130,12 +156,14 @@ A zero-copy C++ processing engine addresses these constraints directly.
 
 ---
 
-## Prototyping Next Steps
+## First milestone (via Craftly)
 
-First engineering goal: capture a **16kHz mono** audio chunk and pass it as a zero-copy packet to JavaScript.
+First engineering goal for a Craftly-driven session: capture a **16kHz mono** audio chunk and pass it as a zero-copy packet to JavaScript.
 
 | Decision | Options |
 | -------- | ------- |
 | Platform capture layer | iOS (Swift) or Android (Kotlin) |
 | Core math vs. native setup | C++ FFT implementation or native microphone configuration |
 | Spec & linking | TypeScript `.nitro.ts` hybrid object contract |
+
+Prompt the harness with a narrow task (Phase 1 or the 16kHz milestone), keep verification honest, and expand phase by phase against this blueprint.

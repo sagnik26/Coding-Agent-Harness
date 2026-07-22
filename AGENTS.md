@@ -1,6 +1,6 @@
 # Project Instructions
 
-Instructions for the coding agent when working in **Coding-Agent-Harness** (TeensyCode).
+Instructions for the coding agent when working in **Coding-Agent-Harness** (Craftly).
 
 This file is read from the working directory at startup and injected into the system prompt under `# Project Instructions (from AGENTS.md)`. Keep it accurate — the agent treats this as ground truth for this repo.
 

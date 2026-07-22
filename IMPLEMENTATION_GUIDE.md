@@ -1,6 +1,6 @@
-# TeensyCode: Step-by-Step Implementation Guide
+# Craftly: Step-by-Step Implementation Guide
 
-A practical build guide for [Vercel Academy's Build Your Own AI Coding Agent Harness](https://vercel.com/academy/build-ai-agent-harness) course. You will build **TeensyCode** — a TypeScript coding agent harness with tools, safety gates, sandbox backends, context management, and subagent delegation.
+A practical build guide for [Vercel Academy's Build Your Own AI Coding Agent Harness](https://vercel.com/academy/build-ai-agent-harness) course. You will build **Craftly** — a TypeScript coding agent harness with tools, safety gates, sandbox backends, context management, and subagent delegation.
 
 ---
 
@@ -109,7 +109,7 @@ pnpm --version   # 9+
 ### Step 0.1 — Initialize the project
 
 ```bash
-mkdir teensycode && cd teensycode
+mkdir craftly && cd craftly
 pnpm init
 pnpm add ai zod                # AI SDK + Zod v3
 pnpm add -D typescript @types/node tsx

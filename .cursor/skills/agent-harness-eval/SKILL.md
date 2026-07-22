@@ -1,6 +1,6 @@
 ---
 name: agent-harness-eval
-description: Use when evaluating, reviewing, grading, or auditing an AI coding agent harness implementation (a tool-loop agent with read/grep/bash tools, sandbox abstraction, subagent delegation, context management, verification gates, approval config, or extensibility layers). Triggers on requests like "evaluate my agent harness", "grade this against the harness course", "review my TeensyCode-style implementation", or "audit this coding agent for context management / verification / delegation quality". Sourced from the Vercel Academy "Build Your Own AI Coding Agent Harness" course Done-When gates.
+description: Use when evaluating, reviewing, grading, or auditing an AI coding agent harness implementation (a tool-loop agent with read/grep/bash tools, sandbox abstraction, subagent delegation, context management, verification gates, approval config, or extensibility layers). Triggers on requests like "evaluate my agent harness", "grade this against the harness course", "review my Craftly-style implementation", or "audit this coding agent for context management / verification / delegation quality". Sourced from the Vercel Academy "Build Your Own AI Coding Agent Harness" course Done-When gates.
 ---
 
 # AI Agent Harness — Evaluation Framework

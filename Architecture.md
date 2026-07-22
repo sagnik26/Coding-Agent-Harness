@@ -1,6 +1,6 @@
 # Architecture
 
-Living document for **Coding-Agent-Harness** (TeensyCode). Update this as modules are added.
+Living document for **Coding-Agent-Harness** (Craftly). Update this as modules are added.
 
 ---
 
