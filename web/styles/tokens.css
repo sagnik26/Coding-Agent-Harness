@@ -1,0 +1,25 @@
+/* Craftly design tokens — see web/DESIGN.md */
+
+@import url("https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&family=Fraunces:opsz,wght@9..144,500;9..144,600&family=IBM+Plex+Mono:wght@400;500;600&display=swap");
+
+:root {
+  --ink-bg: #141210;
+  --panel: #1e1c18;
+  --panel-2: #26231e;
+  --ink: #ebe6da;
+  --muted: #8a8376;
+  --brass: #b8954a;
+  --brass-dim: #8a7038;
+  --sage: #6f8f78;
+  --fault: #c17a6a;
+  --line: #34302a;
+  --focus: #b8954a;
+  --ticket: #2a2722;
+  --ticket-line: #3f3a32;
+  --display: "Fraunces", "Iowan Old Style", Georgia, serif;
+  --sans: "Figtree", "Segoe UI", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", "SF Mono", ui-monospace, monospace;
+  --measure: 40rem;
+  --tool-min-h: 2.85rem;
+  --ease: 0.22s ease;
+}

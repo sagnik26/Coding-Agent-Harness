@@ -1,0 +1,4 @@
+# @coding-agent-harness/web
+.next
+node_modules
+*.tsbuildinfo

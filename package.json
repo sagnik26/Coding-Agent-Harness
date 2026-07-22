@@ -13,7 +13,8 @@
     "lint": "echo 'lint not configured'",
     "eval": "pnpm --filter @coding-agent-harness/eval start",
     "eval:smoke": "pnpm --filter @coding-agent-harness/eval eval:smoke",
-    "eval:dry": "pnpm --filter @coding-agent-harness/eval eval:dry"
+    "eval:dry": "pnpm --filter @coding-agent-harness/eval eval:dry",
+    "web": "pnpm --filter @coding-agent-harness/web dev"
   },
   "keywords": [],
   "author": "",
