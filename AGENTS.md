@@ -94,7 +94,7 @@ CLI entry is **`apps/index.ts`** (calls `main` from `packages/cli`). Eval runs v
 3. Tools are built with the sandbox injected (`createReadTool(sandbox)`, etc.)
 4. `ToolLoopAgent` sends prompt + tool definitions to the model
 5. Model calls tools (`read`, `grep`, `bash`) as needed
-6. `runAgent()` → `printAgentResult()` logs tool trace + answer
+6. `runAgent()` → `agent.stream()`; text to stdout, tool events to stderr
 7. `shutdownSandbox()` in `finally` — always stops sandbox (critical for cloud billing)
 
 ### CLI functions (`packages/cli/src/index.ts`)
@@ -104,8 +104,7 @@ CLI entry is **`apps/index.ts`** (calls `main` from `packages/cli`). Eval runs v
 | `main()` | Wire everything; `try/finally` for cleanup |
 | `createSandbox()` | Factory — `--sandbox` flag / `SANDBOX` env → backend |
 | `createApproval()` | Bash command gating (`packages/core/src/approval.ts` — interactive / delegated) |
-| `runAgent()` | `agent.generate({ prompt })` |
-| `printAgentResult()` | Tool trace + answer + step count |
+| `runAgent()` | `agent.stream({ prompt })`; text → stdout, tools → stderr |
 | `shutdownSandbox()` | `beforeStop` hook + `sandbox.stop()` |
 
 ### Design patterns
@@ -222,7 +221,7 @@ After making code changes:
 | HITL: approval config vs events (concept) | Done (8.2) — events deferred to Module 11 |
 | Planning: `todo` tool + verification gates | Done (9) |
 | Write / edit tools | Done |
-| Streaming CLI | Planned |
+| Streaming CLI | Done (10.2) |
 | Skills system | Planned |
 
 See [IMPLEMENTATION_GUIDE.md](./IMPLEMENTATION_GUIDE.md) for the full roadmap.

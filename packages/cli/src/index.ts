@@ -30,7 +30,6 @@ const customOpenAI = createOpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-/** CLI entry — wire sandbox, tools, agent; always shut down sandbox. */
 export async function main() {
   const { cwd, prompt, sandbox: sandboxType, model: modelId } = parseCliArgs();
   const { chaos, mode } = parseChaosArgs(process.argv.slice(2));
