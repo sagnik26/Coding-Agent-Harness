@@ -21,6 +21,8 @@ A TypeScript coding-agent harness built on the [Vercel AI SDK](https://sdk.verce
 - [Getting started](#getting-started)
 - [Environment variables](#environment-variables)
 - [Roadmap](#roadmap)
+- [Contributing](#contributing)
+- [License](#license)
 
 ---
 
@@ -312,3 +314,12 @@ Upcoming focus areas:
 - [ ] Cloud `onTimeout` snapshots and provider failover
 
 For detailed information, see [docs/roadmap.md](docs/roadmap.md).
+
+## Contributing
+
+Contributions are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for setup, workflow, and PR expectations.
+
+## License
+
+Craftly is released under the [MIT License](LICENSE).
+

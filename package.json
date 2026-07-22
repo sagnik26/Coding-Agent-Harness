@@ -2,6 +2,7 @@
   "name": "coding-agent-harness",
   "version": "1.0.0",
   "private": true,
+  "license": "MIT",
   "type": "module",
   "description": "Craftly — TypeScript coding agent harness (pnpm workspace root)",
   "scripts": {
