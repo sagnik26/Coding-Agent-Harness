@@ -38,6 +38,7 @@ export function renderTool(chunk: Chunk): string {
       return first ? `  -> ${matches.length} matches\n${first}` : `  -> ${matches.length} matches`;
     }
     if (name === "bash") {
+      if (out.startsWith("Blocked:")) return `  -> blocked`;
       const code = out.match(/\(exit code (\d+)\)/)?.[1] ?? "0";
       return `  -> exit ${code}`;
     }

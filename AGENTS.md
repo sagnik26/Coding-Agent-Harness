@@ -129,7 +129,7 @@ See [Architecture.md](./Architecture.md#design-patterns) for full detail. Short 
 | `askUser` | Multiple-choice question when the task is ambiguous (2–4 options) |
 | `todo` | Track multi-step work (add/start/complete/list; one in_progress at a time) |
 
-**Routing:** Read a specific file → `read`. Search patterns → `grep`. Partial file changes → `edit`. New files or full overwrite → `write`. Run commands → `bash`. Multi-step tasks (3+ steps, multiple files) → `todo` to plan and track. Multi-file investigation → `task` (explorer). Independent multi-area research → one explorer `task` with several descriptions. Trusted implementation/verification → `task` with `subagentType: "executor"` and one description; parent synthesizes / decides. Ambiguous requirements → search first, then `askUser` (do not guess).
+**Routing:** Read a specific file → `read`. Search patterns → `grep`. Partial file changes or existing shared configs (`.env.example`, `package.json`, etc.) → `edit` (never wholesale `write`). New files → `write`. Run commands → `bash`. Multi-step tasks (3+ steps, multiple files, or after `loadSkill`) → `todo` until every item is complete before claiming done. Multi-file investigation → `task` (explorer). Independent multi-area research → one explorer `task` with several descriptions. Trusted implementation/verification → `task` with `subagentType: "executor"` and one description; parent synthesizes / decides. Ambiguous requirements → search first, then `askUser` (do not guess). After API/auth/behavior changes → one task-shaped smoke check (not typecheck alone).
 
 ### Sandbox
 
@@ -181,6 +181,7 @@ After making code changes:
 
 - **Allowed** (safe prefixes): `ls`, `cat`, `echo`, `pwd`, `which`, `find`, `head`, `tail`, `wc`, `git log`, `git status`, `git diff`
 - **Allowed** (verification): `pnpm typecheck`, `pnpm run typecheck`, `pnpm test`, `pnpm run test`, `pnpm run lint`, `pnpm run build`, `npx tsc`, and npm equivalents
+- **Allowed** (installs): `pnpm add`, `pnpm --filter <pkg> add|install`, `pnpm install`, `npm install` / `npm add`
 - **Blocked** — returns a string message; report blocks honestly, do not fabricate success
 
 ---

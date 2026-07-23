@@ -4,6 +4,7 @@ export interface PromptContext {
   toolNames: string[];
   gitBranch?: string;
   projectContext?: string;
+  skills?: { name: string; description: string }[];
   verificationCommands?: string[];
 }
 
@@ -31,7 +32,18 @@ export function buildSystemPrompt(ctx: PromptContext): string {
       # Guardrails
       - Prefer simple, minimal changes
       - Search before creating, and reuse existing patterns
-      - No new dependencies without asking`);
+      - No new dependencies without asking
+      - Read existing shared files before changing them; never overwrite .env.example (or similar) wholesale — append or edit`);
+
+  if (ctx.skills?.length) {
+    const lines = ctx.skills
+      .map((s) => `- ${s.name}: ${s.description}`)
+      .join("\n");
+    sections.push(`
+      # Skills
+      The following skills are available. Call \`loadSkill\` with the name to get full content.
+      ${lines}`);
+  }
 
   sections.push(`
       # Handling Ambiguity
@@ -58,12 +70,17 @@ export function buildSystemPrompt(ctx: PromptContext): string {
   if (ctx.toolNames.includes("todo")) {
     sections.push(`
       # Planning (todo)
-      For multi-step work: start → work → complete per item.
+      For multi-step work (3+ steps, multiple files, or after loadSkill): add todos from the skill/workflow steps, then start → work → complete per item.
       - add returns real 8-char id; use exact id for start/complete
       - Never invent ids like step1
       - One in_progress at a time
       - Call todo start once per step — never parallel start calls
       - todo list if id lost; omit id on start (first pending) or complete (in_progress)`);
+
+    sections.push(`
+      # Completion
+      - Do NOT claim the task is done while any todo is pending or in_progress
+      - Final answer: list what you completed; if you skipped a step, say so — do not claim full success`);
   }
 
   const gates = ctx.verificationCommands?.length
@@ -78,6 +95,11 @@ export function buildSystemPrompt(ctx: PromptContext): string {
       Run each gate, capture the output, and report pass or fail honestly.
       "Blocked" means bash returned a message starting with Blocked: — not a failed or stub gate.
       Do not call askUser for blocked gates; report them and continue.
+
+      Typecheck alone is not enough when the change adds API, auth, or other runtime behavior.
+      Run one task-shaped behavior check (e.g. unauthenticated request to a protected route expects 401; a small script or curl when bash allows).
+
+      Final report: which gates ran, which smoke check ran, and what was NOT verified.
 
       Distinguish failures you caused from failures that were already there:
       - "Ran tsc: passed."

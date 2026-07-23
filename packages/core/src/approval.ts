@@ -1,4 +1,8 @@
-import { SAFE_PREFIXES, VERIFICATION_PREFIXES } from "./constants/approval";
+import {
+  SAFE_PREFIXES,
+  VERIFICATION_PREFIXES,
+  isPackageInstall,
+} from "./constants/approval";
 
 export type ApprovalConfig =
   | { mode: "interactive" }
@@ -13,9 +17,11 @@ export function createApproval(config: ApprovalConfig) {
       return !config.trust.some((p) => command.trim().startsWith(p));
     }
 
+    const c = command.trim();
     return !(
-      SAFE_PREFIXES.some((p) => command.trim().startsWith(p)) ||
-      VERIFICATION_PREFIXES.some((p) => command.trim().startsWith(p))
+      SAFE_PREFIXES.some((p) => c.startsWith(p)) ||
+      VERIFICATION_PREFIXES.some((p) => c.startsWith(p)) ||
+      isPackageInstall(c)
     );
   };
 }

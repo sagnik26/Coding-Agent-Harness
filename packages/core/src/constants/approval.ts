@@ -17,3 +17,13 @@ export const VERIFICATION_PREFIXES = [
   "npm run typecheck",
   "npx tsc",
 ] as const;
+
+export function isPackageInstall(command: string): boolean {
+  const c = command.trim();
+  return (
+    /^pnpm(\s+--filter\s+\S+)?\s+add\b/.test(c) ||
+    /^pnpm(\s+--filter\s+\S+)?\s+install\b/.test(c) ||
+    /^npm\s+(install|i|add)\b/.test(c)
+  );
+}
+

@@ -2,6 +2,8 @@ import { tool, ToolLoopAgent, stepCountIs } from "ai";
 import type { Sandbox } from "@coding-agent-harness/core/sandbox";
 import { createApproval } from "@coding-agent-harness/core/approval";
 import { isDangerousCommand } from "@coding-agent-harness/core/helpers";
+import { readFileSync } from "node:fs";
+import { createInterface } from "node:readline/promises";
 import z from "zod";
 import {
   MAX_READ_LINES,
@@ -22,8 +24,35 @@ import {
   formatTodoIds,
   type TodoItem,
 } from "./helpers/index";
+import { discoverSkills, type Skill } from "./skills";
 
 export { toProjectRelativePath, grepSearchPath };
+export { discoverSkills, type Skill };
+
+export function createLoadSkillTool(skills: Skill[]) {
+  const MAX_SKILL_CHARS = 4000;
+  const byName = new Map(skills.map((s) => [s.name, s]));
+
+  return tool({
+    description: `Load the full content of a skill.
+      WHEN TO USE: the task touches a domain you have a skill for (auth, db, testing,
+        deployment, etc.). Check the # Skills section in your instructions.
+      WHEN NOT TO USE: tasks unrelated to any available skill.
+      DO NOT USE FOR: tasks where the skill name is not in the listed skills.`,
+    inputSchema: z.object({
+      name: z.string().describe("Skill name as listed in the Skills section"),
+    }),
+    execute: async ({ name }) => {
+      const skill = byName.get(name);
+      if (!skill) return `Unknown skill: ${name}`;
+      const content = readFileSync(skill.path, "utf-8");
+      return content.length > MAX_SKILL_CHARS
+        ? content.slice(0, MAX_SKILL_CHARS) +
+            `\n... (truncated at ${MAX_SKILL_CHARS} chars)`
+        : content;
+    },
+  });
+}
 
 export function createReadTool(sandbox: Sandbox) {
   return tool({
@@ -194,7 +223,7 @@ export function createBashTool(
     }),
     execute: async ({ command }) => {
       if (isDangerousCommand(command) || needsApproval({ command })) {
-        return `Blocked: "${command}" requires approval. Report honestly; do not call askUser. File edits require write/edit tools.`;
+        return `Blocked: "${command}" requires approval. Report honestly; do not call askUser. File edits require write/edit tools.\n(exit code 1)`;
       }
       const { stdout, exitCode } = await sandbox.exec(command, {
         onStdout: (chunk) => process.stderr.write(chunk),
@@ -214,9 +243,12 @@ export function createWriteTool(sandbox: Sandbox) {
   return tool({
     description: `Write a file to the project (full overwrite or new file).
 
-        WHEN TO USE: creating new files, replacing entire file contents.
+        WHEN TO USE: creating new files, or intentional full replace of a file you own this session.
 
-        WHEN NOT TO USE: partial edits (use edit instead).`,
+        WHEN NOT TO USE: partial edits (use edit instead). Changing an existing shared config.
+
+        DO NOT USE FOR: existing .env.example, .env, package.json, lockfiles, or AGENTS.md —
+          read then edit (append/merge) those instead.`,
     inputSchema: z.object({
       path: z.string().describe("File path relative to working directory"),
       content: z.string().describe("Full file contents to write"),
@@ -233,9 +265,10 @@ export function createEditTool(sandbox: Sandbox) {
   return tool({
     description: `Edit a file by replacing an exact string once.
 
-        WHEN TO USE: targeted changes to existing files (preferred over write).
+        WHEN TO USE: targeted changes to existing files (preferred over write). Especially
+          .env.example, package.json, and other shared configs — append or merge, do not replace wholesale.
 
-        WHEN NOT TO USE: creating new files (use write), changing entire file (use write).`,
+        WHEN NOT TO USE: creating new files (use write), changing entire file (use write only when intentional).`,
     inputSchema: z.object({
       path: z.string().describe("File path relative to working directory"),
       old_string: z
@@ -360,7 +393,43 @@ export function createAskUserTool() {
     execute: async ({ question, options }) => {
       const formatted = options.map((o, i) => `${i + 1}. ${o}`).join("\n");
       console.log(`\nQuestion: ${question}\n${formatted}\n`);
-      return `Asked: "${question}"\nOptions:\n${formatted}\n\n(Awaiting user response.)`;
+
+      if (!process.stdin.isTTY) {
+        return `Asked: "${question}"\nOptions:\n${formatted}\n\n(Awaiting user response.)`;
+      }
+
+      const rl = createInterface({
+        input: process.stdin,
+        output: process.stdout,
+      });
+      try {
+        for (let attempt = 0; attempt < 3; attempt++) {
+          const raw = (
+            await rl.question(`Enter choice (1-${options.length}): `)
+          ).trim();
+          const asNum = Number.parseInt(raw, 10);
+          if (
+            Number.isInteger(asNum) &&
+            asNum >= 1 &&
+            asNum <= options.length
+          ) {
+            const selected = options[asNum - 1]!;
+            return `User selected: "${selected}" (option ${asNum}) for: "${question}"`;
+          }
+          const byText = options.find(
+            (o) => o.toLowerCase() === raw.toLowerCase(),
+          );
+          if (byText) {
+            return `User selected: "${byText}" for: "${question}"`;
+          }
+          console.log(
+            `Invalid choice. Enter a number 1-${options.length} or an option label.`,
+          );
+        }
+        return `Asked: "${question}"\nOptions:\n${formatted}\n\n(No valid user response.)`;
+      } finally {
+        rl.close();
+      }
     },
   });
 }

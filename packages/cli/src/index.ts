@@ -13,6 +13,8 @@ import {
   createAskUserTool,
   createTodoTool,
   createTaskTool,
+  createLoadSkillTool,
+  discoverSkills,
 } from "@coding-agent-harness/tools/tools";
 import { createApproval } from "@coding-agent-harness/core/approval";
 import { discoverGates } from "@coding-agent-harness/core/verification";
@@ -62,6 +64,12 @@ export async function main() {
 
   const verificationCommands = await discoverGates(sandbox);
 
+  const skillDirs = [
+    join(cwd, "skills"),
+    join(process.env.HOME ?? "", ".harness", "skills"),
+  ];
+  const skills = discoverSkills(skillDirs);
+
   const tools = {
     read: createReadTool(sandbox),
     grep: createGrepTool(sandbox),
@@ -70,6 +78,7 @@ export async function main() {
     bash: createBashTool(sandbox, createApproval({ mode: "interactive" })),
     askUser: createAskUserTool(),
     todo: createTodoTool(),
+    loadSkill: createLoadSkillTool(skills),
   };
 
   const explorerModel = customOpenAI(
@@ -96,6 +105,7 @@ export async function main() {
       toolNames: Object.keys(tools_with_task),
       projectContext,
       verificationCommands,
+      skills: skills.map((s) => ({ name: s.name, description: s.description })),
     }),
     tools: tools_with_task,
     stopWhen: stepCountIs(PARENT_STEP_LIMIT),
